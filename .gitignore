@@ -1,0 +1,45 @@
+# API Directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Database files
+databases/
+*.db
+*.json
+
+# Log files
+log_files/
+*.log
+
+# Generated files
+generated_files/
+*.pdf
+*.xlsx
+*.env
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sensitive
+.env
+api_keys.txt
+secrets/
+
+# Dependencies
+libs/

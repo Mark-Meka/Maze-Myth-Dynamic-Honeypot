@@ -1,0 +1,26 @@
+# Requirements for Dynamic API Honeypot
+# Install with: pip install -r requirements.txt
+# Core web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+# State management & database
+tinydb==4.8.0
+# Fake data generation
+faker==20.0.0
+# File generation
+reportlab==4.0.7
+openpyxl==3.1.2
+pillow==10.1.0
+fpdf2==2.7.6
+# LLM integration (using Google Gemini)
+google-generativeai==0.3.2
+# Utilities
+python-dotenv==1.0.0
+# Existing honeypot requirements (if integrating)
+paramiko==3.3.1
+flask==3.0.0
+dash==2.14.1
+dash-bootstrap-components==1.5.0
+plotly==5.17.0
+pandas==2.1.3
