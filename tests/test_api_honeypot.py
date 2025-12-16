@@ -201,7 +201,7 @@ def run_all_tests():
         results.append(("Documentation", test_documentation()))
     else:
         print(f"\n{COLORS['RED']}⚠️  Server not running. Make sure to start it first:{COLORS['END']}")
-        print(f"   python api_honeypot.py")
+        print(f"   python honeypot.py")
         return
     
     # Summary

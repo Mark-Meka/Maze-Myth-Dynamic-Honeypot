@@ -54,7 +54,7 @@ echo "============================================================"
 echo ""
 
 # Run the honeypot
-python3 api_honeypot.py
+python3 honeypot.py
 
 # Deactivate on exit
 deactivate

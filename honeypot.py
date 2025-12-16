@@ -11,12 +11,15 @@ from datetime import datetime
 import json
 from faker import Faker
 from typing import Optional
+import base64
+import random
+import time
 
-# Import custom modules
-from state_manager import APIStateManager
-from file_generator import FileGenerator
-from llm_integration import LLMGenerator
-from api_maze_generator import APIMazeGenerator
+# Import custom modules from src
+from src.state import APIStateManager
+from src.file_generator import FileGenerator
+from src.llm import LLMGenerator
+from src.api_generator import APIMazeGenerator
 
 # Setup Flask app
 app = Flask(__name__)
@@ -44,7 +47,6 @@ except Exception as e:
 log_dir = Path("log_files")
 log_dir.mkdir(exist_ok=True)
 
-import base64
 
 class EncodedFileHandler(logging.FileHandler):
     """Custom handler that Base64 encodes log messages before writing"""
@@ -186,6 +188,37 @@ def track_beacon(beacon_id):
         return send_file(pixel_path, mimetype="image/png")
     return Response(b"", mimetype="image/png")
 
+# ===== CONTEXTUAL FILE GENERATION =====
+
+def generate_contextual_file(path, client_ip):
+    """Generate contextual files based on endpoint path"""
+    path_lower = path.lower()
+    
+    # Determine file type based on endpoint context
+    if 'report' in path_lower or 'analytics' in path_lower:
+        return {
+            "filename": f"report_{fake.random_int(1000, 9999)}.pdf",
+            "type": "pdf",
+            "size": "2.3 MB",
+            "description": "Analytics report"
+        }
+    elif 'export' in path_lower or 'data' in path_lower:
+        return {
+            "filename": f"export_{fake.random_int(1000, 9999)}.xlsx",
+            "type": "excel",
+            "size": "1.8 MB",
+            "description": "Data export"
+        }
+    elif 'config' in path_lower or 'settings' in path_lower:
+        return {
+            "filename": ".env",
+            "type": "env",
+            "size": "421 bytes",
+            "description": "Configuration file"
+        }
+    
+    return None
+
 # ===== DYNAMIC CATCH-ALL WITH MAZE LOGIC =====
 
 @app.route("/<path:full_path>", methods=["GET", "POST", "PUT", "DELETE"])
@@ -213,7 +246,6 @@ def dynamic_endpoint(full_path):
         
         # TARPIT: Slow down directory busters
         if maze._is_directory_buster(user_agent, full_path):
-            import time
             logger.warning(f"[TARPIT] Directory buster detected! Slowing down: {user_agent}")
             time.sleep(2)  # Add 2 second delay to waste their time
         
@@ -289,7 +321,6 @@ def dynamic_endpoint(full_path):
                 
                 # CONTEXTUAL FILE GENERATION
                 # Randomly add files to certain endpoints (30% chance)
-                import random
                 if random.random() < 0.3 and method == "GET":
                     file_info = generate_contextual_file(full_path, client_ip)
                     if file_info:

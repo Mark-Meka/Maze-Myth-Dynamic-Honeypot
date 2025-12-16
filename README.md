@@ -35,32 +35,32 @@ python setup_honeypot.py
 pip install -r requirements.txt
 
 # 3. Run honeypot
-python api_honeypot.py
+python honeypot.py
 ```
 
 The honeypot runs on **http://localhost:8001**
 
 ## 📖 Documentation
 
-- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute setup guide
-- **[API_MAZE_DEMO.md](API_MAZE_DEMO.md)** - See how the maze works
-- **[GEMINI_USAGE.md](GEMINI_USAGE.md)** - AI integration guide
-- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Testing scenarios
+- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** - 5-minute setup guide
+- **[docs/API_MAZE_DEMO.md](docs/API_MAZE_DEMO.md)** - See how the maze works
+- **[docs/GEMINI_USAGE.md](docs/GEMINI_USAGE.md)** - AI integration guide
+- **[docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md)** - Testing scenarios
 
 ## 🎬 Demo
 
 ```bash
 # Watch an attacker navigate the maze
-python demo_maze_attack.py
+python tests/demo_maze_attack.py
 ```
 
 ## 🔑 Gemini API Setup
 
 1. Get free API key: https://makersuite.google.com/app/apikey
-2. Edit `llm_integration.py` and add your key
+2. Edit `src/llm/llm_integration.py` and add your key
 3. Restart the honeypot
 
-See [GEMINI_API_SETUP.md](GEMINI_API_SETUP.md) for details.
+See [docs/GEMINI_USAGE.md](docs/GEMINI_USAGE.md) for details.
 
 ## 🏗️ Architecture
 
@@ -102,18 +102,37 @@ See [GEMINI_API_SETUP.md](GEMINI_API_SETUP.md) for details.
 ## 📁 Project Structure
 
 ```
-├── api_honeypot.py          # Main honeypot server
-├── api_maze_generator.py    # Maze logic & breadcrumbs
-├── llm_integration.py        # Gemini AI integration
-├── state_manager.py          # Database persistence
-├── file_generator.py         # Bait file creation
-├── api_structure_seed.json   # API categories & tokens
-├── requirements.txt          # Dependencies
+├── honeypot.py              # Main honeypot entry point
+├── requirements.txt         # Dependencies
 ├── setup_honeypot.py        # Setup script
-├── demo_maze_attack.py      # Attack simulation
-├── verify_gemini.py         # Test AI integration
-└── databases/               # TinyDB storage
-    └── api_state.json       # Generated endpoints
+├── run_honeypot.bat         # Windows launcher
+├── run_honeypot.sh          # Linux/Mac launcher
+├── src/                     # Source code
+│   ├── api_generator/       # API maze generation
+│   │   └── maze_generator.py
+│   ├── llm/                 # AI integration
+│   │   └── llm_integration.py
+│   ├── file_generator/      # Bait file creation
+│   │   └── generator.py
+│   ├── state/               # State management
+│   │   └── state_manager.py
+│   └── fine_tuning/         # Model fine-tuning
+├── tests/                   # Test files
+│   ├── test_api_honeypot.py
+│   └── demo_maze_attack.py
+├── utils/                   # Utility scripts
+│   ├── read_logs.py
+│   └── verify_gemini.py
+├── docs/                    # Documentation
+│   ├── QUICKSTART.md
+│   ├── API_MAZE_DEMO.md
+│   ├── GEMINI_USAGE.md
+│   └── TESTING_GUIDE.md
+├── config/                  # Configuration
+│   └── .env.template
+├── databases/               # TinyDB storage
+├── generated_files/         # Generated files
+└── log_files/              # Audit logs
 ```
 
 ## 🎯 How the Maze Works

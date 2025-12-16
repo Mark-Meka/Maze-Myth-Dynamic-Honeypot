@@ -66,7 +66,7 @@ echo ============================================================
 echo.
 
 REM Run the honeypot
-python api_honeypot.py
+python honeypot.py
 
 REM Deactivate on exit
 deactivate
