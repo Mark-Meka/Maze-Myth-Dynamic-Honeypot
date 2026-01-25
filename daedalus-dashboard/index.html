@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Daedalus | Real-Time Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0e17;
+            color: #e8ecf1;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a1f2e, #0f1419);
+            border: 1px solid #00f3ff40;
+            border-radius: 8px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.1);
+        }
+
+        h1 {
+            font-size: 24px;
+            background: linear-gradient(135deg, #00f3ff, #ffb800);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 0.1em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #8a94a6;
+            font-size: 12px;
+            letter-spacing: 0.05em;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #00f3ff;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #8a94a6;
+            margin-top: 5px;
+            letter-spacing: 0.05em;
+        }
+
+        .activity-feed {
+            background: rgba(26, 31, 46, 0.8);
+            border: 1px solid #00f3ff40;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .activity-feed h2 {
+            font-size: 16px;
+            color: #00f3ff;
+            margin-bottom: 15px;
+            letter-spacing: 0.1em;
+        }
+
+        .activity-item {
+            background: rgba(15, 20, 25, 0.6);
+            border-left: 3px solid #00f3ff;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .activity-item.warning {
+            border-left-color: #ffb800;
+        }
+
+        .activity-item.critical {
+            border-left-color: #ff0055;
+            background: rgba(255, 0, 85, 0.05);
+        }
+
+        .activity-item.discovery {
+            border-left-color: #00f3ff;
+        }
+
+        .activity-item.beacon {
+            border-left-color: #ff0055;
+            animation: pulse 1s ease;
+        }
+
+        .activity-item.download {
+            border-left-color: #ffb800;
+        }
+
+        .activity-timestamp {
+            font-size: 10px;
+            color: #5a6372;
+            margin-bottom: 5px;
+        }
+
+        .activity-message {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #e8ecf1;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #00ff88;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.6;
+                transform: scale(1.2);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .activity-feed::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .activity-feed::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .activity-feed::-webkit-scrollbar-thumb {
+            background: #00f3ff;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>PROJECT DAEDALUS</h1>
+            <p class="subtitle">REAL-TIME HONEYPOT MONITORING SYSTEM</p>
+            <div style="margin-top: 15px;">
+                <span class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span>MONITORING ACTIVE</span>
+                </span>
+            </div>
+        </header>
+
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-value" id="total-endpoints">0</div>
+                <div class="stat-label">TOTAL ENDPOINTS</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-activity">0</div>
+                <div class="stat-label">TOTAL ACTIVITY</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="discoveries">0</div>
+                <div class="stat-label">NEW DISCOVERIES</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="downloads">0</div>
+                <div class="stat-label">FILE DOWNLOADS</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="beacons">0</div>
+                <div class="stat-label">BEACON ACTIVATIONS</div>
+            </div>
+        </div>
+
+        <div class="activity-feed">
+            <h2>🔴 LIVE ACTIVITY FEED</h2>
+            <div id="activity-list">
+                <div class="activity-item">
+                    <div class="activity-timestamp">Waiting for activity...</div>
+                    <div class="activity-message">Monitoring honeypot logs for real-time events</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8002';
+        let lastUpdate = Date.now();
+
+        async function updateStats() {
+            try {
+                const response = await fetch(`${API_URL}/api/stats`);
+                const stats = await response.json();
+
+                document.getElementById('total-endpoints').textContent = stats.total_endpoints || 0;
+                document.getElementById('total-activity').textContent = stats.total_entries || 0;
+                document.getElementById('discoveries').textContent = stats.type_counts?.discovery || 0;
+                document.getElementById('downloads').textContent = stats.type_counts?.download || 0;
+                document.getElementById('beacons').textContent = stats.type_counts?.beacon || 0;
+            } catch (error) {
+                console.warn('Stats fetch error:', error);
+            }
+        }
+
+        async function checkForNewActivity() {
+            try {
+                const response = await fetch(`${API_URL}/api/new`);
+                const newEntries = await response.json();
+
+                if (newEntries && newEntries.length > 0) {
+                    const list = document.getElementById('activity-list');
+
+                    // Remove placeholder if it exists
+                    if (list.children.length === 1 && list.children[0].textContent.includes('Waiting')) {
+                        list.innerHTML = '';
+                    }
+
+                    newEntries.forEach(entry => {
+                        const item = document.createElement('div');
+                        item.className = `activity-item ${entry.level?.toLowerCase() || ''} ${entry.type || ''}`;
+
+                        item.innerHTML = `
+                            <div class="activity-timestamp">${entry.timestamp || new Date().toLocaleTimeString()}</div>
+                            <div class="activity-message">${entry.message || 'Activity detected'}</div>
+                        `;
+
+                        list.insertBefore(item, list.firstChild);
+                    });
+
+                    // Keep only last 50 items
+                    while (list.children.length > 50) {
+                        list.removeChild(list.lastChild);
+                    }
+
+                    updateStats();
+                }
+            } catch (error) {
+                console.warn('Activity fetch error:', error);
+            }
+        }
+
+        // Initial load
+        async function init() {
+            await updateStats();
+
+            // Load recent activity
+            try {
+                const response = await fetch(`${API_URL}/api/activity`);
+                const entries = await response.json();
+
+                if (entries && entries.length > 0) {
+                    const list = document.getElementById('activity-list');
+                    list.innerHTML = '';
+
+                    entries.reverse().slice(0, 30).forEach(entry => {
+                        const item = document.createElement('div');
+                        item.className = `activity-item ${entry.level?.toLowerCase() || ''} ${entry.type || ''}`;
+
+                        item.innerHTML = `
+                            <div class="activity-timestamp">${entry.timestamp || ''}</div>
+                            <div class="activity-message">${entry.message || 'Activity detected'}</div>
+                        `;
+
+                        list.appendChild(item);
+                    });
+                }
+            } catch (error) {
+                console.warn('Initial load error:', error);
+            }
+        }
+
+        // Start monitoring
+        init();
+        setInterval(checkForNewActivity, 2000);  // Check every 2 seconds
+        setInterval(updateStats, 5000);  // Update stats every 5 seconds
+    </script>
+</body>
+
+</html>
