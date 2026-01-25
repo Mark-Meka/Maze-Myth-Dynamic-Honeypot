@@ -29,8 +29,21 @@ src/                     # All source code
 ├── api_generator/       # API maze generation
 ├── llm/                 # AI response generation
 ├── file_generator/      # Bait file creation
+│   ├── generator.py     # Main file generator (PDF, Excel, ENV)
+│   ├── sqlite_gen.py    # SQLite database generator
+│   └── txt_gen.py       # Text file generator (logs, configs, credentials)
+├── rag/                 # RAG document loader
+│   └── rag_loader.py    # Loads banking API context
 ├── state/               # State management
 └── fine_tuning/         # Model fine-tuning
+
+RAG/                     # RAG knowledge base
+└── banking_api_graph_rag/  # Banking API context
+
+daedalus-dashboard/      # Real-time monitoring dashboard
+├── monitor.py           # Backend API server
+├── index.html           # Dashboard UI
+└── start.bat            # One-click launcher
 
 tests/                   # Test files
 utils/                   # Utility scripts

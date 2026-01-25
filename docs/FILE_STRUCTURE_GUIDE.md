@@ -237,6 +237,80 @@ Lists all required Python packages:
 
 ---
 
+#### 🟠 `sqlite_gen.py` - HIGH
+**Purpose:** SQLite database generator for realistic database bait files  
+**Description:**
+- Creates contextual databases based on endpoint paths
+- Generates customer databases with fake PII
+- Creates transaction databases with payment records
+- Produces account databases with balances
+- Generates audit log databases
+- Embeds tracking beacons in hidden metadata tables
+
+**Key Classes/Functions:**
+- `SQLiteGenerator` - Main database generation class
+- `generate_database()` - Creates contextual database
+- `_create_customer_db()` - Customer/user tables
+- `_create_transaction_db()` - Financial transactions
+- `_create_account_db()` - Account information
+- `_create_logs_db()` - Audit logs
+
+**Why It's High:** Adds highly realistic database files that attackers will download and analyze.
+
+---
+
+#### 🟠 `txt_gen.py` - HIGH
+**Purpose:** Text file generator for configs, logs, and credentials  
+**Description:**
+- Generates realistic .env files with fake API keys
+- Creates system log files with audit entries
+- Produces configuration files (YAML, INI style)
+- Generates credential files with passwords and secrets
+- All files contain believable but fake sensitive data
+
+**Key Classes/Functions:**
+- `TextFileGenerator` - Main text file generation class
+- `generate_text_file()` - Smart file generation based on endpoint
+- `_generate_env_file()` - Environment configuration
+- `_generate_log_file()` - System/audit logs
+- `_generate_config_file()` - Application configs
+- `_generate_credentials_file()` - Secrets and passwords
+
+**Why It's High:** Highly attractive bait for attackers seeking credentials and configuration.
+
+---
+
+### 📁 `src/rag/` - RAG Context Loading
+
+#### 🟠 `rag_loader.py` - HIGH
+**Purpose:** Loads RAG documents to provide context for consistent API generation  
+**Description:**
+- Recursively loads all files from RAG directory
+- Categorizes content into API patterns, schemas, sample data
+- Provides context summaries for LLM prompts
+- Extracts relevant schemas based on endpoint paths
+- Supplies sample data for file generation
+- Falls back to default banking/financial context
+
+**Key Classes/Functions:**
+- `RAGLoader` - Main RAG document loader
+- `load_documents()` - Scans and loads all RAG files
+- `get_context_summary()` - Provides summary for LLM
+- `get_schema_for_endpoint()` - Matches schemas to endpoints
+- `get_sample_data()` - Retrieves realistic sample data
+
+**Why It's High:** Ensures consistency and realism across API responses and file generation.
+
+---
+
+#### 🟢 `__init__.py` - LOW
+**Purpose:** Package initializer  
+**Description:** Exports `RAGLoader` for easy imports
+
+**Why It's Low:** Just makes imports cleaner.
+
+---
+
 ### 📁 `src/state/` - State Management
 
 #### 🔴 `state_manager.py` - CRITICAL

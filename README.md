@@ -330,7 +330,7 @@ Some endpoints lead to:
 
 ---
 
-## � Project Structure
+## 📁 Project Structure
 
 ```
 Maze-Myth-Dynamic-Honeypot/
@@ -338,15 +338,25 @@ Maze-Myth-Dynamic-Honeypot/
 ├── src/
 │   ├── state.py             # Endpoint state manager
 │   ├── file_generator/      # Bait file creation
-│   │   └── generator.py
+│   │   ├── generator.py     # Main generator (PDF, Excel, ENV)
+│   │   ├── sqlite_gen.py    # SQLite database generator
+│   │   └── txt_gen.py       # Text file generator (logs, configs, secrets)
 │   ├── llm/                 # Gemini AI integration
 │   │   └── llm_integration.py
+│   ├── rag/                 # RAG context loader
+│   │   └── rag_loader.py    # Loads banking API knowledge
 │   └── api_generator/       # Dynamic maze logic
 │       └── maze_generator.py
+├── RAG/                     # RAG knowledge base
+│   └── banking_api_graph_rag/  # Banking API context (JSON)
 ├── daedalus-dashboard/      # Real-time monitor
 │   ├── monitor.py           # Backend API
-│   └── index.html           # Dashboard UI
+│   ├── index.html           # Dashboard UI
+│   └── start.bat            # One-click launcher
 ├── log_files/               # Encoded activity logs
+├── generated_files/         # Dynamic bait files
+│   ├── databases/           # Generated SQLite files
+│   └── textfiles/           # Generated TXT/ENV/log files
 └── static/                  # Tracking pixels, assets
 ```
 

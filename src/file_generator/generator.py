@@ -337,3 +337,79 @@ beacon = {beacon_id}
         
         self.logger.info(f"Generated {file_format}: {filename} with beacon {beacon_id} for {client_ip}")
         return filepath, beacon_id
+    
+    def generate_random_file(self, endpoint_path, client_ip, rag_context=None):
+        """
+        Generate a random file type based on endpoint context
+        
+        Args:
+            endpoint_path: The API endpoint path requesting the file
+            client_ip: IP of requester
+            rag_context: Optional RAG context for realistic content
+            
+        Returns:
+            tuple: (filepath, filename, beacon_id, file_type)
+        """
+        import random
+        from .sqlite_gen import SQLiteGenerator
+        from .txt_gen import TextFileGenerator
+        
+        beacon_id = str(uuid.uuid4())
+        endpoint_lower = endpoint_path.lower()
+        
+        # Determine file type based on endpoint
+        if 'database' in endpoint_lower or 'db' in endpoint_lower or 'data' in endpoint_lower:
+            # Prefer SQLite for database endpoints
+            file_types = ['sqlite', 'excel', 'pdf']
+            weights = [0.6, 0.2, 0.2]
+        elif 'config' in endpoint_lower or 'settings' in endpoint_lower:
+            # Prefer config files
+            file_types = ['txt', 'env', 'yaml']
+            weights = [0.4, 0.4, 0.2]
+        elif 'secret' in endpoint_lower or 'cred' in endpoint_lower or 'key' in endpoint_lower:
+            # Prefer credentials
+            file_types = ['txt', 'env']
+            weights = [0.6, 0.4]
+        elif 'log' in endpoint_lower or 'audit' in endpoint_lower:
+            # Prefer logs
+            file_types = ['txt', 'pdf']
+            weights = [0.7, 0.3]
+        else:
+            # Random mix
+            file_types = ['pdf', 'txt', 'sqlite', 'env', 'excel']
+            weights = [0.3, 0.25, 0.2, 0.15, 0.1]
+        
+        file_type = random.choices(file_types, weights=weights)[0]
+        
+        try:
+            if file_type == 'sqlite':
+                sql_gen = SQLiteGenerator(output_dir=str(self.output_dir / "databases"))
+                filepath, filename = sql_gen.generate_database(rag_context, beacon_id, endpoint_path)
+            elif file_type == 'txt':
+                txt_gen = TextFileGenerator(output_dir=str(self.output_dir / "textfiles"))
+                filepath, filename = txt_gen.generate_text_file(rag_context, beacon_id, endpoint_path)
+            elif file_type == 'pdf':
+                filepath, _ = self.generate_pdf(f"document_{beacon_id[:8]}.pdf", client_ip, rag_context)
+                filename = filepath.name
+            elif file_type == 'env':
+                filepath, _ = self.generate_env_file(f"config_{beacon_id[:8]}.env", client_ip, rag_context)
+                filename = filepath.name
+            elif file_type == 'excel':
+                filepath, _ = self.generate_excel(f"data_{beacon_id[:8]}.xlsx", client_ip, rag_context)
+                filename = filepath.name
+            elif file_type == 'yaml':
+                filepath, _ = self.generate_config_file(f"config_{beacon_id[:8]}.yaml", client_ip, "yaml")
+                filename = filepath.name
+            else:
+                # Fallback to PDF
+                filepath, _ = self.generate_pdf(f"document_{beacon_id[:8]}.pdf", client_ip, rag_context)
+                filename = filepath.name
+            
+            self.logger.info(f"Generated random {file_type} file: {filename} for endpoint {endpoint_path}")
+            return filepath, filename, beacon_id, file_type
+            
+        except Exception as e:
+            self.logger.error(f"Random file generation failed: {e}")
+            # Fallback to simple PDF
+            filepath, _ = self.generate_pdf(f"fallback_{beacon_id[:8]}.pdf", client_ip)
+            return filepath, filepath.name, beacon_id, 'pdf'

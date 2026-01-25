@@ -2,7 +2,7 @@
 
 **Short Description (max 350 chars for GitHub):**
 
-A dynamic API honeypot that generates deception paths to keep attackers trapped in an ever-changing maze. Uses AI-powered responses, fake authentication, and psychological tricks to waste attacker time while capturing their techniques.
+A dynamic API honeypot that generates deception paths to keep attackers trapped in an ever-changing maze. Uses RAG-based context, AI-powered responses, fake authentication, and psychological tricks to waste attacker time while capturing their techniques. Generates realistic SQLite databases, PDFs, and credential files as bait.
 
 **Topics/Tags:**
 
