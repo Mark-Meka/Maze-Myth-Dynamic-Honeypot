@@ -164,18 +164,48 @@ def get_stats():
     
     # Try to get state stats, but use calculated values if it fails
     total_endpoints = len(unique_endpoints)
+    total_downloads = type_counts.get('download', 0)
     try:
         stats = state.get_statistics()
         if stats.get('total_endpoints', 0) > total_endpoints:
             total_endpoints = stats.get('total_endpoints', 0)
+        if stats.get('total_downloads', 0) > total_downloads:
+            total_downloads = stats.get('total_downloads', 0)
     except:
         pass
     
     return jsonify({
         'total_endpoints': total_endpoints,
         'total_entries': len(recent_activity),
+        'total_downloads': total_downloads,
         'type_counts': type_counts
     })
+
+@app.route('/api/downloads')
+def get_downloads():
+    """Get file download activity"""
+    try:
+        downloads = state.get_downloads(limit=100)
+        return jsonify({
+            'downloads': downloads,
+            'total': len(downloads),
+            'sensitive_count': len([d for d in downloads if d.get('is_sensitive')])
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'downloads': []})
+
+@app.route('/api/sensitive')
+def get_sensitive():
+    """Get sensitive file downloads only"""
+    try:
+        sensitive = state.get_sensitive_downloads()
+        return jsonify({
+            'downloads': sensitive,
+            'total': len(sensitive)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'downloads': []})
+
 
 if __name__ == '__main__':
     print("\n" + "="*60)

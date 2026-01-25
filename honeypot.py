@@ -20,6 +20,9 @@ from src.state import APIStateManager
 from src.file_generator import FileGenerator
 from src.llm import LLMGenerator
 from src.api_generator import APIMazeGenerator
+from src.api_generator.http_responses import HTTPResponseGenerator
+from src.rag import RAGLoader
+from src.data_generator import banking_data
 
 # Setup Flask app
 app = Flask(__name__)
@@ -33,11 +36,23 @@ state = APIStateManager()
 fake = Faker()
 file_gen = FileGenerator(server_url="http://localhost:8001")
 maze = APIMazeGenerator()  # API Maze Generator
+http_resp = HTTPResponseGenerator()  # HTTP Response Generator
+
+# Load RAG banking context
+try:
+    rag = RAGLoader(rag_dir="src/rag")
+    rag_enabled = True
+    print("[RAG] Banking API context loaded")
+except Exception as e:
+    print(f"[RAG] Load Failed: {e}")
+    rag = None
+    rag_enabled = False
+
 
 try:
     llm = LLMGenerator()
     llm_enabled = True
-    print("[MAZE] Gemini AI enabled for realistic responses")
+    print("[MAZE] Gemini AI enabled for realistic banking responses")
 except Exception as e:
     print(f"[MAZE] LLM Init Failed: {e}")
     llm = None
@@ -76,20 +91,301 @@ logger = logging.getLogger(__name__)
 
 @app.route("/")
 def root():
+    company_name = rag.get_company_name() if rag_enabled else "SecureBank Financial Services"
     return jsonify({
-        "name": "Corporate API Gateway",
-        "version": "2.3.1",
+        "name": f"{company_name} API Gateway",
+        "version": "3.2.0",
         "status": "operational",
-        "endpoints": {
-            "health": "/health",
-            "authentication": "/api/v1/auth/login",
-            "api_v1": "/api/v1/",
-            "api_v2": "/api/v2/admin/"
+        "api": {
+            "companies": "/companies",
+            "merchants": "/merchants", 
+            "accounts": "/api/v1/accounts",
+            "transactions": "/api/v1/transactions",
+            "payments": "/api/v1/payments",
+            "reports": "/api/v1/reports",
+            "admin": "/api/v2/admin",
+            "internal": "/internal"
         },
-        "timestamp": datetime.utcnow().isoformat()
+        "auth": "/api/v1/auth/login"
     })
 
-@app.route("/health")
+# ===== REAL BANKING DATA ENDPOINTS (DYNAMIC) =====
+
+@app.route("/companies")
+def list_companies():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /companies from {client_ip}")
+    companies = banking_data.generate_companies()
+    return jsonify({
+        "companies": companies,
+        "total": len(companies),
+        "_links": {"webhooks": f"/companies/{companies[0]['id']}/webhooks" if companies else None}
+    })
+
+@app.route("/companies/<company_id>")
+def get_company(company_id):
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /companies/{company_id} from {client_ip}")
+    return jsonify({
+        "id": company_id,
+        "name": banking_data._gen_company_name(),
+        "status": "active",
+        "created": banking_data._gen_date(1825),
+        "accounts": f"/companies/{company_id}/accounts",
+        "webhooks": f"/companies/{company_id}/webhooks",
+        "apiCredentials": f"/companies/{company_id}/apiCredentials",
+        "settings": f"/companies/{company_id}/settings"
+    })
+
+@app.route("/companies/<company_id>/accounts")
+def company_accounts(company_id):
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /companies/{company_id}/accounts from {client_ip}")
+    accounts = banking_data.generate_accounts(random.randint(5, 15))
+    return jsonify({
+        "company_id": company_id,
+        "accounts": accounts,
+        "total": len(accounts)
+    })
+
+@app.route("/companies/<company_id>/apiCredentials")
+def company_credentials(company_id):
+    client_ip = request.remote_addr
+    logger.critical(f"[ALERT] API credentials accessed by {client_ip}")
+    creds = []
+    for i in range(random.randint(3, 8)):
+        cred_id = f"cred_{random.randint(1000000000, 9999999999)}"
+        creds.append({
+            "id": cred_id,
+            "type": random.choice(["api_key", "webhook_secret", "oauth_token", "service_key"]),
+            "created": banking_data._gen_date(365),
+            "download": f"/api/download/{cred_id}_key.json"
+        })
+    return jsonify({"credentials": creds, "total": len(creds)})
+
+@app.route("/api/v1/accounts")
+def list_accounts():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/accounts from {client_ip}")
+    accounts = banking_data.generate_accounts()
+    return jsonify({
+        "accounts": accounts,
+        "total": len(accounts),
+        "export": "/api/v1/accounts/export"
+    })
+
+@app.route("/api/v1/accounts/<account_id>")
+def get_account(account_id):
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/accounts/{account_id} from {client_ip}")
+    return jsonify({
+        "id": account_id,
+        "holder": banking_data._gen_company_name(),
+        "type": random.choice(["business", "corporate", "investment", "savings"]),
+        "balance": banking_data._gen_amount(10000, 50000000),
+        "available": banking_data._gen_amount(5000, 45000000),
+        "currency": random.choice(["USD", "EUR", "GBP"]),
+        "opened": banking_data._gen_date(1825),
+        "transactions": f"/api/v1/accounts/{account_id}/transactions",
+        "statements": f"/api/v1/accounts/{account_id}/statements",
+        "transfers": f"/api/v1/accounts/{account_id}/transfers"
+    })
+
+@app.route("/api/v1/accounts/<account_id>/transactions")
+def account_transactions(account_id):
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET transactions for {account_id} from {client_ip}")
+    transactions = banking_data.generate_transactions(account_id=account_id)
+    return jsonify({
+        "account_id": account_id,
+        "transactions": transactions,
+        "total": len(transactions),
+        "export": f"/api/v1/accounts/{account_id}/transactions/export"
+    })
+
+@app.route("/api/v1/accounts/<account_id>/statements")
+def account_statements(account_id):
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET statements for {account_id} from {client_ip}")
+    statements = []
+    for i in range(random.randint(6, 24)):
+        date = datetime.now() - timedelta(days=i * 30)
+        period = date.strftime("%Y-%m")
+        statements.append({
+            "period": period,
+            "file": f"/api/download/statement_{account_id}_{period.replace('-', '_')}.pdf"
+        })
+    return jsonify({
+        "account_id": account_id,
+        "statements": statements,
+        "export_all": f"/api/download/statements_{account_id}_all.zip"
+    })
+
+@app.route("/api/v1/transactions")
+def list_transactions():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/transactions from {client_ip}")
+    transactions = banking_data.generate_transactions()
+    return jsonify({
+        "transactions": transactions,
+        "total": len(transactions),
+        "export": "/api/v1/transactions/export",
+        "reports": "/api/v1/reports/transactions"
+    })
+
+@app.route("/api/v1/payments")
+def list_payments():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/payments from {client_ip}")
+    payments = banking_data.generate_payments()
+    return jsonify({
+        "payments": payments,
+        "total": len(payments)
+    })
+
+@app.route("/merchants")
+def list_merchants():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /merchants from {client_ip}")
+    merchants = banking_data.generate_merchants()
+    return jsonify({
+        "merchants": merchants,
+        "total": len(merchants)
+    })
+
+@app.route("/merchants/<merchant_id>/terminals")
+def merchant_terminals(merchant_id):
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET terminals for {merchant_id} from {client_ip}")
+    terminals = banking_data.generate_terminals(merchant_id)
+    return jsonify({
+        "merchant_id": merchant_id,
+        "terminals": terminals,
+        "total": len(terminals)
+    })
+
+@app.route("/api/v1/reports")
+def list_reports():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/reports from {client_ip}")
+    reports = banking_data.generate_reports()
+    return jsonify({
+        "reports": {
+            "financial": "/api/v1/reports/financial",
+            "transactions": "/api/v1/reports/transactions",
+            "audit": "/api/v1/reports/audit",
+            "compliance": "/api/v1/reports/compliance"
+        },
+        "recent_exports": reports,
+        "total": len(reports)
+    })
+
+@app.route("/api/v1/reports/financial")
+def financial_reports():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/reports/financial from {client_ip}")
+    reports = [r for r in banking_data.generate_reports() if r['type'] in ['pdf', 'xlsx', 'csv']]
+    return jsonify({"reports": reports, "total": len(reports)})
+
+@app.route("/api/v1/reports/transactions")  
+def transaction_reports():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/reports/transactions from {client_ip}")
+    reports = [r for r in banking_data.generate_reports() if r['type'] in ['db', 'sqlite', 'csv', 'xml']]
+    return jsonify({"reports": reports, "total": len(reports)})
+
+@app.route("/api/v1/reports/audit")
+def audit_reports():
+    client_ip = request.remote_addr
+    logger.info(f"[API] GET /api/v1/reports/audit from {client_ip}")
+    reports = [r for r in banking_data.generate_reports() if r['type'] in ['json', 'xml', 'db', 'pdf']]
+    return jsonify({"reports": reports, "total": len(reports)})
+
+@app.route("/internal")
+def internal_root():
+    client_ip = request.remote_addr
+    logger.warning(f"[ALERT] Internal endpoint accessed by {client_ip}")
+    return jsonify({
+        "debug": "/internal/debug",
+        "config": "/internal/config",
+        "deploy": "/internal/deploy",
+        "backups": "/internal/backups",
+        "logs": "/internal/logs"
+    })
+
+@app.route("/internal/config")
+def internal_config():
+    client_ip = request.remote_addr
+    logger.critical(f"[ALERT] Internal config accessed by {client_ip}")
+    return jsonify({
+        "database": "/internal/config/database",
+        "credentials": "/internal/config/credentials",
+        "environment": "/internal/config/environment",
+        "secrets": "/internal/config/secrets",
+        "services": "/internal/config/services"
+    })
+
+@app.route("/internal/config/database")
+def internal_database():
+    client_ip = request.remote_addr
+    logger.critical(f"[ALERT] Database config accessed by {client_ip}")
+    import uuid
+    return jsonify({
+        "primary": {"host": f"db-primary-{random.randint(1,9)}.internal.bank", "port": 5432, "name": "banking_prod"},
+        "replica": {"host": f"db-replica-{random.randint(1,5)}.internal.bank", "port": 5432, "name": "banking_prod"},
+        "analytics": {"host": f"db-analytics.internal.bank", "port": 5432, "name": "analytics_warehouse"},
+        "connection_string": "/api/download/db_connection.txt",
+        "schema": "/api/download/schema.sql",
+        "credentials": f"/api/download/db_creds_{uuid.uuid4().hex[:8]}.json"
+    })
+
+@app.route("/internal/backups")
+def internal_backups():
+    client_ip = request.remote_addr
+    logger.critical(f"[ALERT] Backups accessed by {client_ip}")
+    backups = banking_data.generate_backups()
+    return jsonify({
+        "backups": backups,
+        "total": len(backups),
+        "next_scheduled": banking_data._gen_date(0)
+    })
+
+@app.route("/api/v2/admin")
+def admin_root():
+    client_ip = request.remote_addr
+    authorization = request.headers.get('Authorization')
+    if not authorization:
+        return jsonify({"error": "Unauthorized", "login": "/api/v1/auth/login"}), 401
+    logger.warning(f"[ADMIN] Admin access by {client_ip}")
+    return jsonify({
+        "users": "/api/v2/admin/users",
+        "settings": "/api/v2/admin/settings",
+        "logs": "/api/v2/admin/logs",
+        "secrets": "/api/v2/admin/secrets",
+        "audit": "/api/v2/admin/audit"
+    })
+
+@app.route("/api/v2/admin/users")
+def admin_users():
+    client_ip = request.remote_addr
+    logger.warning(f"[ADMIN] User list accessed by {client_ip}")
+    users = banking_data.generate_users()
+    return jsonify({
+        "users": users,
+        "total": len(users)
+    })
+
+@app.route("/api/v2/admin/secrets")
+def admin_secrets():
+    client_ip = request.remote_addr
+    logger.critical(f"[CRITICAL] Admin secrets accessed by {client_ip}")
+    secrets = banking_data.generate_secrets()
+    return jsonify({
+        "secrets": secrets,
+        "total": len(secrets),
+        "warning": "Audit logged"
+    })
+
 def health_check():
     stats = state.get_statistics()
     return jsonify({
@@ -145,31 +441,201 @@ def fake_internal_auth():
 
 @app.route("/api/download/<path:filename>")
 def download_file(filename):
+    """Universal file download with tracking"""
     client_ip = request.remote_addr
+    user_agent = request.headers.get('User-Agent', '')
     
-    logger.warning(json.dumps({
-        "event": "file_download",
+    # LOG DOWNLOAD EVENT FOR DASHBOARD
+    download_event = {
+        "event": "FILE_DOWNLOAD",
+        "timestamp": datetime.utcnow().isoformat(),
         "ip": client_ip,
-        "filename": filename
-    }))
+        "filename": filename,
+        "user_agent": user_agent[:100]
+    }
+    logger.critical(json.dumps(download_event))
+    
+    # Save to state for dashboard monitoring
+    state.log_download(filename, client_ip, user_agent)
     
     try:
+        import uuid
+        beacon_id = str(uuid.uuid4())
+        
+        # PDF Files
         if filename.endswith('.pdf'):
             filepath, beacon_id = file_gen.generate_pdf(filename, client_ip)
-            state.save_beacon(beacon_id, "pdf", filename, client_ip)
+            file_type = "pdf"
+        
+        # Excel Files
         elif filename.endswith(('.xlsx', '.xls')):
             filepath, beacon_id = file_gen.generate_excel(filename, client_ip)
-            state.save_beacon(beacon_id, "excel", filename, client_ip)
-        elif filename.endswith('.env'):
-            filepath, beacon_id = file_gen.generate_env_file(filename, client_ip)
-            state.save_beacon(beacon_id, "env", filename, client_ip)
+            file_type = "excel"
+        
+        # SQLite/Database Files
+        elif filename.endswith(('.db', '.sqlite', '.sqlite3')):
+            from src.file_generator.sqlite_gen import SQLiteGenerator
+            sqlite_gen = SQLiteGenerator()
+            filepath, _ = sqlite_gen.generate_database({"ip": client_ip}, beacon_id, endpoint_path=f"/api/download/{filename}")
+            file_type = "sqlite"
+        
+        # Text Files
+        elif filename.endswith('.txt'):
+            from src.file_generator.txt_gen import TextFileGenerator
+            txt_gen = TextFileGenerator()
+            filepath, _ = txt_gen.generate_text_file({"ip": client_ip}, beacon_id, endpoint_path=f"/api/download/{filename}")
+            file_type = "txt"
+        
+        # XML Files
+        elif filename.endswith('.xml'):
+            from src.file_generator.multi_format_gen import MultiFormatGenerator
+            multi_gen = MultiFormatGenerator()
+            filepath, beacon_id = multi_gen.generate_xml(filename, client_ip)
+            file_type = "xml"
+        
+        # CSV Files
+        elif filename.endswith('.csv'):
+            from src.file_generator.multi_format_gen import MultiFormatGenerator
+            multi_gen = MultiFormatGenerator()
+            filepath, beacon_id = multi_gen.generate_csv(filename, client_ip)
+            file_type = "csv"
+        
+        # JavaScript Config Files
+        elif filename.endswith('.js'):
+            from src.file_generator.multi_format_gen import MultiFormatGenerator
+            multi_gen = MultiFormatGenerator()
+            filepath, beacon_id = multi_gen.generate_js(filename, client_ip)
+            file_type = "js"
+        
+        # JSON Files
+        elif filename.endswith('.json'):
+            from src.file_generator.multi_format_gen import MultiFormatGenerator
+            multi_gen = MultiFormatGenerator()
+            filepath, beacon_id = multi_gen.generate_json(filename, client_ip)
+            file_type = "json"
+        
+        # SQL Schema Files
+        elif filename.endswith('.sql'):
+            from src.file_generator.txt_gen import TextFileGenerator
+            txt_gen = TextFileGenerator()
+            filepath, _ = txt_gen.generate_text_file({"ip": client_ip, "type": "schema"}, beacon_id, endpoint_path="/internal/config/database")
+            file_type = "sql"
+        
         else:
+            logger.warning(f"[DOWNLOAD] Unknown file type: {filename}")
             return jsonify({"error": "File not found"}), 404
+        
+        # Save beacon for tracking
+        state.save_beacon(beacon_id, file_type, filename, client_ip)
+        
+        # Alert for sensitive files
+        if any(x in filename.lower() for x in ['credential', 'secret', 'key', 'password', 'backup', 'config']):
+            logger.critical(f"[CRITICAL] SENSITIVE FILE DOWNLOADED: {filename} by {client_ip}")
+        
+        print(f"\n{'='*60}")
+        print(f"[FILE DOWNLOAD]")
+        print(f"  File:    {filename}")
+        print(f"  Type:    {file_type}")
+        print(f"  IP:      {client_ip}")
+        print(f"  Beacon:  {beacon_id[:8]}...")
+        print(f"  Time:    {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        print(f"{'='*60}\n")
         
         return send_file(filepath, as_attachment=True, download_name=filename)
     except Exception as e:
         logger.error(f"File generation error: {e}")
-        return jsonify({"error": "Internal error"}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal error", "message": str(e)}), 500
+
+
+# ===== REPORT EXPORT ENDPOINTS (Generate Real Files) =====
+
+@app.route("/api/v1/reports/export")
+def export_reports():
+    """Generate downloadable report files"""
+    client_ip = request.remote_addr
+    format_type = request.args.get('format', 'pdf')
+    
+    logger.warning(f"[EXPORT] Report export request: format={format_type} from {client_ip}")
+    
+    try:
+        if format_type == 'pdf':
+            filepath, beacon_id = file_gen.generate_pdf("financial_report.pdf", client_ip)
+            filename = "financial_report.pdf"
+        elif format_type == 'xlsx':
+            filepath, beacon_id = file_gen.generate_excel("transactions.xlsx", client_ip)
+            filename = "transactions.xlsx"
+        elif format_type in ['sqlite', 'db']:
+            from src.file_generator.sqlite_gen import SQLiteGenerator
+            import uuid
+            sqlite_gen = SQLiteGenerator()
+            beacon_id = str(uuid.uuid4())
+            filepath, filename = sqlite_gen.generate_database({"ip": client_ip}, beacon_id, endpoint_path="/api/v1/reports/export")
+        elif format_type == 'txt':
+            from src.file_generator.txt_gen import TextFileGenerator
+            import uuid
+            txt_gen = TextFileGenerator()
+            beacon_id = str(uuid.uuid4())
+            filepath, filename = txt_gen.generate_text_file({"ip": client_ip}, beacon_id, endpoint_path="/api/v1/reports/audit")
+        else:
+            return jsonify({"error": "Unsupported format", "supported": ["pdf", "xlsx", "sqlite", "db", "txt"]}), 400
+        
+        state.save_beacon(beacon_id, format_type, filename, client_ip)
+        logger.critical(f"[EXPORT] File generated: {filename} for {client_ip}")
+        
+        return send_file(filepath, as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Export error: {e}")
+        return jsonify({"error": "Export failed", "message": str(e)}), 500
+
+@app.route("/api/v1/transactions/export")
+def export_transactions():
+    """Export transactions as downloadable file"""
+    client_ip = request.remote_addr
+    format_type = request.args.get('format', 'sqlite')
+    
+    logger.warning(f"[EXPORT] Transaction export: format={format_type} from {client_ip}")
+    
+    try:
+        from src.file_generator.sqlite_gen import SQLiteGenerator
+        import uuid
+        sqlite_gen = SQLiteGenerator()
+        beacon_id = str(uuid.uuid4())
+        filepath, filename = sqlite_gen.generate_database({"ip": client_ip}, beacon_id, endpoint_path="/api/v1/transactions/export")
+        
+        state.save_beacon(beacon_id, "sqlite", filename, client_ip)
+        logger.critical(f"[EXPORT] Transaction DB downloaded by {client_ip}")
+        
+        return send_file(filepath, as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Transaction export error: {e}")
+        return jsonify({"error": "Export failed"}), 500
+
+@app.route("/internal/config/credentials")
+def internal_credentials():
+    """Fake credentials file - highly attractive target"""
+    client_ip = request.remote_addr
+    
+    logger.critical(f"[ALERT] Internal credentials accessed by {client_ip}!")
+    
+    try:
+        from src.file_generator.txt_gen import TextFileGenerator
+        import uuid
+        txt_gen = TextFileGenerator()
+        beacon_id = str(uuid.uuid4())
+        filepath, filename = txt_gen.generate_text_file({"ip": client_ip}, beacon_id, endpoint_path="/internal/config/credentials")
+        
+        state.save_beacon(beacon_id, "credentials", filename, client_ip)
+        
+        return send_file(filepath, as_attachment=True, download_name=filename)
+    except Exception as e:
+        return jsonify({
+            "error": "Access logged",
+            "message": "Contact security team",
+            "alert_sent": True
+        }), 403
+
 
 @app.route("/track/<beacon_id>")
 def track_beacon(beacon_id):
@@ -244,10 +710,25 @@ def dynamic_endpoint(full_path):
                 "path": f"/{full_path}"
             }), 404
         
-        # TARPIT: Slow down directory busters
+        # TARPIT: Slow down directory busters  
         if maze._is_directory_buster(user_agent, full_path):
             logger.warning(f"[TARPIT] Directory buster detected! Slowing down: {user_agent}")
             time.sleep(2)  # Add 2 second delay to waste their time
+        
+        # CHECK IF SHOULD RETURN ERROR STATUS CODE
+        has_auth = authorization is not None
+        should_error, status_code = http_resp.should_return_error(
+            f"/{full_path}", 
+            has_auth=has_auth,
+            auth_level=access_level
+        )
+        
+        if should_error:
+            error_response = http_resp.get_response_for_status(status_code, f"/{full_path}")
+            if error_response:
+                logger.info(f"[HTTP] {status_code} response for /{full_path} - {access_level} access")
+                return jsonify(error_response['response']), error_response['status_code'], error_response.get('headers', {})
+
         
         logger.info(f"[MAZE] {method} /{full_path} | Access: {access_level} | IP: {client_ip}")
         
@@ -316,35 +797,59 @@ def dynamic_endpoint(full_path):
                 response_content = llm.generate_api_response(full_path, method, context=enhanced_prompt)
                 
                 # Add breadcrumbs to the response
-                response_data = json.loads(response_content)
-                response_data = maze.add_breadcrumbs(response_data, full_path, access_level)
-                
-                # CONTEXTUAL FILE GENERATION
-                # Randomly add files to certain endpoints (30% chance)
-                if random.random() < 0.3 and method == "GET":
-                    file_info = generate_contextual_file(full_path, client_ip)
-                    if file_info:
-                        response_data["_attachments"] = response_data.get("_attachments", [])
-                        response_data["_attachments"].append({
-                            "filename": file_info["filename"],
-                            "type": file_info["type"],
-                            "download_url": f"/api/download/{file_info['filename']}",
-                            "size": file_info.get("size", "unknown"),
-                            "description": file_info.get("description", "Related document")
-                        })
-                        logger.info(f"[FILE] Generated {file_info['type']} for /{full_path}")
-                
-                response_content = json.dumps(response_data)
-                
-                logger.info(f"[GEMINI+MAZE] Generated for {method} {full_path}")
-                print(f"\n[GEMINI+MAZE] {method} {full_path} | Level: {access_level}")
-                
+                api_response = llm.generate_api_response(
+                    full_path, 
+                    method,
+                    context=f"access_level: {access_level}",
+                    rag_context=rag if rag_enabled else None
+                )
             except Exception as e:
-                logger.error(f"Gemini failed: {e}")
-                response_content = generate_fallback_response(full_path, method)
-                print(f"\n[FALLBACK] {method} {full_path}")
+                logger.error(f"[LLM] Generation failed: {e}")
+                api_response = json.dumps({"data": [], "message": "Success"})
         else:
-            response_content = generate_fallback_response(full_path, method)
+            # Fallback without LLM
+            api_response = json.dumps({
+                "data": [],
+                "message": "Success", 
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        
+        # AUTO-GENERATE AND ATTACH FILES (20% chance)
+        attachments = []
+        if random.random() < 0.2:
+            try:
+                filepath, filename, beacon_id, file_type = file_gen.generate_random_file(
+                    f"/{full_path}",
+                    client_ip,
+                    rag_context=rag if rag_enabled else None
+                )
+                
+                # Add download URL to response
+                download_url = f"/download/{beacon_id}"
+                attachments.append({
+                    "filename": filename,
+                    "type": file_type,
+                    "download_url": download_url,
+                    "size": f"{filepath.stat().st_size} bytes"
+                })
+                
+                # Save beacon for tracking
+                state.save_beacon(beacon_id, filename, client_ip, f"/{full_path}")
+                logger.info(f"[FILE] Generated {file_type} file: {filename} for /{full_path}")
+            except Exception as e:
+                logger.error(f"[FILE] Generation failed: {e}")
+        
+        # Add attachments to response if generated
+        if attachments:
+            try:
+                response_dict = json.loads(api_response)
+                response_dict['_attachments'] = attachments
+                api_response = json.dumps(response_dict)
+            except:
+                pass
+        
+        response_content = api_response
+
         
         # Save endpoint
         state.save_endpoint(full_path, method, response_content)

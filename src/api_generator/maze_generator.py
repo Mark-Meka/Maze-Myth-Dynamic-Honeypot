@@ -11,13 +11,30 @@ from typing import Dict, List, Optional
 class APIMazeGenerator:
     """Generates interconnected API maze with breadcrumbs and logical structure"""
     
-    def __init__(self, structure_file="api_structure_seed.json"):
-        with open(structure_file, 'r') as f:
-            self.structure = json.load(f)
+    def __init__(self, structure_file=None):
+        # Inline API structure - no external file needed
+        self.categories = {
+            "companies": {"prefix": "/companies", "requires_auth": False},
+            "accounts": {"prefix": "/api/v1/accounts", "requires_auth": True},
+            "transactions": {"prefix": "/api/v1/transactions", "requires_auth": True},
+            "payments": {"prefix": "/api/v1/payments", "requires_auth": True},
+            "merchants": {"prefix": "/merchants", "requires_auth": False},
+            "reports": {"prefix": "/api/v1/reports", "requires_auth": True},
+            "admin": {"prefix": "/api/v2/admin", "requires_auth": "admin"},
+            "internal": {"prefix": "/internal", "requires_auth": "internal"}
+        }
         
-        self.categories = self.structure['api_categories']
-        self.breadcrumb_templates = self.structure['breadcrumb_templates']
-        self.fake_tokens = self.structure['fake_tokens']
+        self.breadcrumb_templates = {
+            "auth": "Authenticate at /api/v1/auth/login",
+            "admin": "Admin access required",
+            "related": "See also: {endpoints}"
+        }
+        
+        self.fake_tokens = {
+            "user": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.user",
+            "admin": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.admin",
+            "internal": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.internal"
+        }
     
     def determine_access_level(self, path: str, auth_token: Optional[str] = None) -> str:
         """Determine what access level the request has"""
@@ -49,60 +66,56 @@ class APIMazeGenerator:
         """
         Validate if the endpoint follows logical API patterns
         
-        STRICT MODE: Only accept real API resources (users, products, orders, etc.)
-        TARPIT MODE: If directory buster detected, be slightly more permissive
+        PERMISSIVE MODE: Accept all reasonable banking/API paths
+        Only reject clearly garbage paths
         """
         import re
         
         # Detect directory busting tools
         is_dirbusting = self._is_directory_buster(user_agent, path)
         
-        # STRICT validation - only logical API resources
-        valid_patterns = [
-            # Directory/discovery endpoints
-            r"^api/v1/?$",  # /api/v1 or /api/v1/
-            r"^api/v2/admin/?$",  # /api/v2/admin or /api/v2/admin/
-            r"^internal/?$",  # /internal or /internal/
-            
-            # API v1 - only specific resources
-            r"^api/v1/(users|products|orders|files|auth)(/|$)",
-            r"^api/v1/users/(\d+|\{id\})(/profile|/settings|/orders)?$",
-            r"^api/v1/products/(\d+|\{id\})(/inventory|/reviews)?$",
-            r"^api/v1/orders/(\d+|\{id\})(/status|/items)?$",
-            r"^api/v1/files/(\d+|\{id\})$",
-            
-            # API v2 admin - only specific resources
-            r"^api/v2/admin/(users|analytics|settings|logs)(/|$)",
-            r"^api/v2/admin/users/(\d+|\{id\})(/permissions)?$",
-            
-            # Internal - only specific resources
-            r"^internal/(debug|config|deploy)(/|$)",
-            r"^internal/debug/(trace|memory|logs)$",
-            r"^internal/config/(database|secrets|env)$",
-            r"^internal/deploy/(status|trigger)$",
+        # PERMISSIVE - Accept all API paths
+        path_lower = path.lower()
+        
+        # Always accept if starts with api/
+        if path_lower.startswith("api/"):
+            return True
+        
+        # Accept banking/financial keywords anywhere in path
+        banking_keywords = [
+            'account', 'transaction', 'customer', 'payment', 'transfer',
+            'balance', 'statement', 'card', 'loan', 'deposit', 'withdraw',
+            'invoice', 'report', 'export', 'user', 'auth', 'login', 'token',
+            'profile', 'setting', 'config', 'admin', 'internal', 'debug',
+            'docs', 'health', 'status', 'data', 'file', 'download', 'secret',
+            'companies', 'merchants', 'terminals', 'webhooks', 'credentials'
         ]
         
-        # Check strict patterns
-        for pattern in valid_patterns:
-            if re.match(pattern, path):
+        for keyword in banking_keywords:
+            if keyword in path_lower:
                 return True
         
-        # If directory buster, accept common scan patterns to tarpit them
-        if is_dirbusting:
-            tarpit_patterns = [
-                r"(admin|login|test|backup|config)\.php$",
-                r"(admin|login|test)\.aspx$",
-                r"wp-admin|phpmyadmin",
-                r"\.git|\.env|\.htaccess",
-                r"^admin/|^administrator/|^backup/",
-            ]
-            
-            for pattern in tarpit_patterns:
-                if re.search(pattern, path, re.IGNORECASE):
-                    return True  # Tarpit these scanner patterns
+        # Accept internal/admin paths
+        if path_lower.startswith("internal/") or path_lower.startswith("admin/"):
+            return True
         
-        # Reject everything else
-        return False
+        # If directory buster, accept to tarpit them
+        if is_dirbusting:
+            return True
+        
+        # REJECT only garbage patterns
+        garbage_patterns = [
+            r"^\d+$",  # Just numbers
+            r"\.(php|aspx?|jsp|cgi)$",  # Server scripts
+        ]
+        
+        for pattern in garbage_patterns:
+            if re.search(pattern, path_lower):
+                return False
+        
+        # Default: ACCEPT (be permissive)
+        return True
+
     
     def _is_directory_buster(self, user_agent: str, path: str) -> bool:
         """Detect if request is from a directory busting tool"""

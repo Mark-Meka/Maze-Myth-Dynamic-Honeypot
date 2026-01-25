@@ -16,6 +16,7 @@ class APIStateManager:
         self.endpoints = self.db.table('endpoints')
         self.objects = self.db.table('objects')
         self.beacons = self.db.table('beacons')
+        self.downloads = self.db.table('downloads')
         
     def endpoint_exists(self, path, method):
         """Check if endpoint already generated"""
@@ -100,5 +101,29 @@ class APIStateManager:
             'total_endpoints': len(self.endpoints),
             'total_objects': len(self.objects),
             'total_beacons': len(self.beacons),
-            'activated_beacons': len([b for b in self.beacons if b.get('accessed_at')])
+            'activated_beacons': len([b for b in self.beacons if b.get('accessed_at')]),
+            'total_downloads': len(self.downloads)
         }
+    
+    def log_download(self, filename, client_ip, user_agent=""):
+        """Log file download event for dashboard monitoring"""
+        self.downloads.insert({
+            'filename': filename,
+            'client_ip': client_ip,
+            'user_agent': user_agent[:200] if user_agent else "",
+            'timestamp': datetime.utcnow().isoformat(),
+            'is_sensitive': any(x in filename.lower() for x in ['credential', 'secret', 'key', 'password', 'backup', 'config', 'db', 'sqlite'])
+        })
+    
+    def get_downloads(self, limit=50):
+        """Get recent downloads for dashboard"""
+        all_downloads = self.downloads.all()
+        # Sort by timestamp descending
+        sorted_downloads = sorted(all_downloads, key=lambda x: x.get('timestamp', ''), reverse=True)
+        return sorted_downloads[:limit]
+    
+    def get_sensitive_downloads(self):
+        """Get only sensitive file downloads"""
+        Download = Query()
+        return self.downloads.search(Download.is_sensitive == True)
+
