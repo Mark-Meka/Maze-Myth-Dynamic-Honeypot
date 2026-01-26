@@ -11,7 +11,7 @@ faker==20.0.0
 # File generation
 reportlab==4.0.7
 openpyxl==3.1.2
-pillow==10.1.0
+pillow==10.3.0
 fpdf2==2.7.6
 # LLM integration (using Google Gemini)
 google-generativeai==0.3.2
