@@ -12,7 +12,7 @@ fake = Faker()
 
 
 class BankingDataGenerator:
-    """Generate dynamic banking data that changes on each call"""
+    """Generate dynamic banking data that stays consistent during server session"""
     
     def __init__(self):
         self.company_prefixes = ["Apex", "Sterling", "Meridian", "Global", "Premier", "Atlas", "Pinnacle", "Summit", "Crown", "Elite", "Pacific", "Northern", "Eastern", "Western", "Central"]
@@ -21,6 +21,9 @@ class BankingDataGenerator:
         self.payment_methods = ["wire", "ach", "swift", "internal", "sepa", "fedwire"]
         self.currencies = ["USD", "EUR", "GBP", "CHF", "JPY", "CAD", "AUD"]
         self.transaction_types = ["wire_transfer", "deposit", "withdrawal", "payment", "refund", "fee", "interest", "dividend", "payroll"]
+        
+        # SESSION CACHE - Data stays same on refresh, only changes on server restart
+        self._cache = {}
     
     def _gen_id(self, prefix, length=9):
         """Generate random ID with prefix"""
@@ -39,7 +42,11 @@ class BankingDataGenerator:
         return f"{random.choice(self.company_prefixes)} {random.choice(self.company_suffixes)}"
     
     def generate_companies(self, count=None):
-        """Generate list of companies"""
+        """Generate list of companies - cached per session"""
+        cache_key = 'companies'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(8, 20)
         
@@ -55,10 +62,16 @@ class BankingDataGenerator:
                 "webhooks": f"/companies/{cid}/webhooks",
                 "apiCredentials": f"/companies/{cid}/apiCredentials"
             })
+        
+        self._cache[cache_key] = companies
         return companies
     
     def generate_accounts(self, count=None):
-        """Generate list of accounts"""
+        """Generate list of accounts - cached per session"""
+        cache_key = 'accounts'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(15, 40)
         
@@ -78,10 +91,16 @@ class BankingDataGenerator:
                 "transactions": f"/api/v1/accounts/{aid}/transactions",
                 "statements": f"/api/v1/accounts/{aid}/statements"
             })
+        
+        self._cache[cache_key] = accounts
         return accounts
     
     def generate_transactions(self, count=None, account_id=None):
-        """Generate list of transactions"""
+        """Generate list of transactions - cached per session"""
+        cache_key = f'transactions_{account_id or "all"}'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(20, 100)
         
@@ -114,10 +133,16 @@ class BankingDataGenerator:
             
             transactions.append(txn)
         
-        return sorted(transactions, key=lambda x: x["date"], reverse=True)
+        result = sorted(transactions, key=lambda x: x["date"], reverse=True)
+        self._cache[cache_key] = result
+        return result
     
     def generate_payments(self, count=None):
-        """Generate list of payments"""
+        """Generate list of payments - cached per session"""
+        cache_key = 'payments'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(10, 35)
         
@@ -136,10 +161,16 @@ class BankingDataGenerator:
                 "details": f"/api/v1/payments/{pid}",
                 "receipt": f"/api/download/payment_receipt_{pid}.pdf"
             })
+        
+        self._cache[cache_key] = payments
         return payments
     
     def generate_merchants(self, count=None):
-        """Generate list of merchants"""
+        """Generate list of merchants - cached per session"""
+        cache_key = 'merchants'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(8, 25)
         
@@ -157,6 +188,8 @@ class BankingDataGenerator:
                 "transactions": f"/merchants/{mid}/transactions",
                 "settlements": f"/merchants/{mid}/settlements"
             })
+        
+        self._cache[cache_key] = merchants
         return merchants
     
     def generate_terminals(self, merchant_id, count=None):
@@ -180,7 +213,11 @@ class BankingDataGenerator:
         return terminals
     
     def generate_users(self, count=None):
-        """Generate list of admin users"""
+        """Generate list of admin users - cached per session"""
+        cache_key = 'users'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(5, 15)
         
@@ -198,10 +235,16 @@ class BankingDataGenerator:
                 "api_key": f"/api/download/user_{uid}_key.txt",
                 "permissions": f"/api/v2/admin/users/{uid}/permissions"
             })
+        
+        self._cache[cache_key] = users
         return users
     
     def generate_reports(self):
-        """Generate list of available reports"""
+        """Generate list of available reports - cached per session"""
+        cache_key = 'reports'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         report_types = [
             ("Q4_2024_Financial", "pdf", "2.4 MB"),
             ("Annual_Report_2024", "pdf", "8.1 MB"),
@@ -248,10 +291,15 @@ class BankingDataGenerator:
                 "download": f"/api/download/{name}.{ext}"
             })
         
+        self._cache[cache_key] = reports
         return reports
     
     def generate_backups(self, count=None):
-        """Generate list of backup files"""
+        """Generate list of backup files - cached per session"""
+        cache_key = 'backups'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
         if count is None:
             count = random.randint(5, 12)
         
@@ -271,6 +319,7 @@ class BankingDataGenerator:
                 "download": f"/api/download/{name}.{ext}"
             })
         
+        self._cache[cache_key] = backups
         return backups
     
     def generate_secrets(self):

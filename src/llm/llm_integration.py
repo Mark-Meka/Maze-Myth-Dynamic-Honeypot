@@ -11,7 +11,7 @@ import logging
 class LLMGenerator:
     """Generate realistic API responses using Google Gemini"""
     
-    def __init__(self, api_key="AIzaSyCbncHTb01bnPwND6eviaO4xoW8J43GJx4", model="gemini-2.0-flash"):
+    def __init__(self, api_key="AIzaSyC0PVSenpHFc87mRxu7hogzewqpL8sTxuY", model="gemini-2.0-flash"):
         """
         Initialize Gemini generator
         

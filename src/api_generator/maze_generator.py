@@ -24,6 +24,56 @@ class APIMazeGenerator:
             "internal": {"prefix": "/internal", "requires_auth": "internal"}
         }
         
+        # DEFINED VALID ENDPOINTS - Only these paths return 200
+        # Any path not matching these patterns returns 404
+        self.valid_endpoints = [
+            # Root level directories (gobuster will find these)
+            "api", "admin", "internal", "companies", "merchants", "docs", "health",
+            "login", "auth", "users", "config", "backup", "data", "export", "reports",
+            "dashboard", "settings", "profile", "download", "upload", "files", "static",
+            
+            # API v1 endpoints
+            "api/v1", "api/v1/accounts", "api/v1/transactions", "api/v1/payments",
+            "api/v1/reports", "api/v1/auth", "api/v1/auth/login", "api/v1/auth/elevate",
+            "api/v1/users", "api/v1/health", "api/v1/docs",
+            
+            # API v2 endpoints (admin)
+            "api/v2", "api/v2/admin", "api/v2/admin/users", "api/v2/admin/settings",
+            "api/v2/admin/logs", "api/v2/admin/secrets", "api/v2/admin/audit",
+            
+            # Internal endpoints (sensitive)
+            "internal/config", "internal/debug", "internal/backups", "internal/logs",
+            "internal/deploy", "internal/config/database", "internal/config/credentials",
+            "internal/config/secrets",
+            
+            # Company endpoints
+            "companies", "merchants",
+            
+            # File/download endpoints
+            "api/download", "files", "export", "backup", "backups",
+            
+            # Common directories attackers look for
+            "admin", "administrator", "login", "wp-admin", "phpmyadmin", 
+            "console", "portal", "manage", "manager",
+        ]
+        
+        # Patterns that match dynamic endpoints (ID-based)
+        self.dynamic_patterns = [
+            r"^api/v1/accounts/[A-Z0-9]+$",
+            r"^api/v1/accounts/[A-Z0-9]+/transactions$",
+            r"^api/v1/accounts/[A-Z0-9]+/statements$",
+            r"^api/v1/transactions/[A-Z0-9]+$",
+            r"^api/v1/payments/[A-Z0-9]+$",
+            r"^companies/[A-Z0-9]+$",
+            r"^companies/[A-Z0-9]+/accounts$",
+            r"^companies/[A-Z0-9]+/apiCredentials$",
+            r"^companies/[A-Z0-9]+/webhooks$",
+            r"^merchants/[A-Z0-9]+$",
+            r"^merchants/[A-Z0-9]+/terminals$",
+            r"^api/v2/admin/users/[A-Z0-9]+$",
+            r"^api/download/.+$",
+        ]
+        
         self.breadcrumb_templates = {
             "auth": "Authenticate at /api/v1/auth/login",
             "admin": "Admin access required",
@@ -64,57 +114,24 @@ class APIMazeGenerator:
     
     def is_valid_endpoint(self, path: str, user_agent: str = "") -> bool:
         """
-        Validate if the endpoint follows logical API patterns
-        
-        PERMISSIVE MODE: Accept all reasonable banking/API paths
-        Only reject clearly garbage paths
+        Check if path is a VALID endpoint that should return 200
+        Returns False for paths that should return 404
         """
         import re
         
-        # Detect directory busting tools
-        is_dirbusting = self._is_directory_buster(user_agent, path)
+        path_lower = path.lower().strip('/')
         
-        # PERMISSIVE - Accept all API paths
-        path_lower = path.lower()
-        
-        # Always accept if starts with api/
-        if path_lower.startswith("api/"):
+        # Check exact match with valid endpoints
+        if path_lower in [ep.lower() for ep in self.valid_endpoints]:
             return True
         
-        # Accept banking/financial keywords anywhere in path
-        banking_keywords = [
-            'account', 'transaction', 'customer', 'payment', 'transfer',
-            'balance', 'statement', 'card', 'loan', 'deposit', 'withdraw',
-            'invoice', 'report', 'export', 'user', 'auth', 'login', 'token',
-            'profile', 'setting', 'config', 'admin', 'internal', 'debug',
-            'docs', 'health', 'status', 'data', 'file', 'download', 'secret',
-            'companies', 'merchants', 'terminals', 'webhooks', 'credentials'
-        ]
-        
-        for keyword in banking_keywords:
-            if keyword in path_lower:
+        # Check dynamic patterns (endpoints with IDs) - ONLY these patterns are valid
+        for pattern in self.dynamic_patterns:
+            if re.match(pattern, path, re.IGNORECASE):
                 return True
         
-        # Accept internal/admin paths
-        if path_lower.startswith("internal/") or path_lower.startswith("admin/"):
-            return True
-        
-        # If directory buster, accept to tarpit them
-        if is_dirbusting:
-            return True
-        
-        # REJECT only garbage patterns
-        garbage_patterns = [
-            r"^\d+$",  # Just numbers
-            r"\.(php|aspx?|jsp|cgi)$",  # Server scripts
-        ]
-        
-        for pattern in garbage_patterns:
-            if re.search(pattern, path_lower):
-                return False
-        
-        # Default: ACCEPT (be permissive)
-        return True
+        # Reject everything else with 404 - no prefix matching!
+        return False
 
     
     def _is_directory_buster(self, user_agent: str, path: str) -> bool:

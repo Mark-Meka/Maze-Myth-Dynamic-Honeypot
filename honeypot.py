@@ -76,6 +76,7 @@ class EncodedFileHandler(logging.FileHandler):
         except Exception:
             self.handleError(record)
 
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -86,6 +87,13 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# CRITICAL: Ensure console handler is attached to logger (Flask may override)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+logger.setLevel(logging.INFO)
 
 # ===== SPECIFIC ROUTES (these have priority) =====
 
@@ -698,22 +706,29 @@ def dynamic_endpoint(full_path):
         authorization = request.headers.get('Authorization')
         user_agent = request.headers.get('User-Agent', '')
         
+        # DEBUG: Print every request hitting catch-all
+        is_valid = maze.is_valid_endpoint(full_path, user_agent)
+        print(f"[DEBUG] /{full_path} | valid={is_valid}", flush=True)
+        
         # Determine access level based on path and token
         access_level = maze.determine_access_level(full_path, authorization)
         
-        # VALIDATE ENDPOINT - Reject silly paths, but tarpit directory busters
-        if not maze.is_valid_endpoint(full_path, user_agent):
+        # VALIDATE ENDPOINT - Return 404 for paths not in our defined structure
+        if not is_valid:
             logger.warning(f"[MAZE] INVALID path rejected: /{full_path}")
+            # CONSOLE MONITORING - Always visible
+            print(f"[404] {method} /{full_path} | IP: {client_ip} | NOT FOUND", flush=True)
             return jsonify({
                 "error": "Not Found",
                 "message": f"The requested URL was not found on this server.",
                 "path": f"/{full_path}"
             }), 404
         
-        # TARPIT: Slow down directory busters  
+        
+        # Log directory scanning (detect gobuster, dirsearch, etc)
         if maze._is_directory_buster(user_agent, full_path):
-            logger.warning(f"[TARPIT] Directory buster detected! Slowing down: {user_agent}")
-            time.sleep(2)  # Add 2 second delay to waste their time
+            logger.info(f"[SCAN] Directory scan detected: {user_agent[:50]}")
+            print(f"[SCAN] Scanner detected: {user_agent[:30]} accessing /{full_path}", flush=True)
         
         # CHECK IF SHOULD RETURN ERROR STATUS CODE
         has_auth = authorization is not None
@@ -731,6 +746,9 @@ def dynamic_endpoint(full_path):
 
         
         logger.info(f"[MAZE] {method} /{full_path} | Access: {access_level} | IP: {client_ip}")
+        # CONSOLE OUTPUT - Always visible (Flask logging can be unreliable)
+        import sys
+        print(f"[REQUEST] {method} /{full_path} | IP: {client_ip} | Access: {access_level}", flush=True)
         
         # Check if endpoint exists in state
         if state.endpoint_exists(full_path, method):
@@ -910,4 +928,5 @@ def print_startup_banner():
 
 if __name__ == "__main__":
     print_startup_banner()
-    app.run(host="0.0.0.0", port=8001, debug=True)
+    # use_reloader=False so logs show in main console (not subprocess)
+    app.run(host="0.0.0.0", port=8001, debug=True, use_reloader=False)
