@@ -1,18 +1,23 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
+
 REM ============================================================
 REM  Maze Myth Dynamic Honeypot — Windows Launcher
-REM  Starts both the Honeypot (port 8001) and Dashboard (port 8002)
-REM  in separate windows.
+REM  Double-click from anywhere — always uses the correct folder.
 REM ============================================================
+
+REM ── Always run from the folder this .bat file lives in ───────
+cd /d "%~dp0"
 
 echo.
 echo ============================================================
 echo   Maze Myth Dynamic Honeypot - Launcher
 echo ============================================================
+echo   Project: %~dp0
+echo ============================================================
 echo.
 
-REM ── Check Python ────────────────────────────────────────────
+REM ── Check Python ─────────────────────────────────────────────
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Python is not installed or not in PATH.
@@ -21,7 +26,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM ── Create virtual environment if missing ───────────────────
+REM ── Create virtual environment if missing ────────────────────
 if not exist "venv\" (
     echo [INFO] Creating virtual environment...
     python -m venv venv
@@ -33,10 +38,15 @@ if not exist "venv\" (
     echo [OK]   Virtual environment created.
 )
 
-REM ── Activate venv ───────────────────────────────────────────
+REM ── Activate venv ────────────────────────────────────────────
 call venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo [ERROR] Could not activate virtual environment.
+    pause
+    exit /b 1
+)
 
-REM ── Install / verify dependencies ────────────────────────────
+REM ── Install / verify dependencies ──────────────────────────
 echo [INFO] Checking dependencies...
 python -c "import flask, flask_cors, faker, reportlab, fpdf, openpyxl, PIL, dotenv, google.generativeai" >nul 2>&1
 if errorlevel 1 (
@@ -52,46 +62,44 @@ if errorlevel 1 (
     echo [OK]   Dependencies already installed.
 )
 
-REM ── Create required directories ──────────────────────────────
-if not exist "databases\"      mkdir databases
-if not exist "log_files\"      mkdir log_files
+REM ── Create required directories ────────────────────────────
+if not exist "databases\"       mkdir databases
+if not exist "log_files\"       mkdir log_files
 if not exist "generated_files\" mkdir generated_files
 
-REM ── Check .env file ──────────────────────────────────────────
+REM ── Check .env file ────────────────────────────────────────
 if not exist ".env" (
-    echo [WARN] .env file not found.
-    echo        Copying .env.template to .env ...
+    echo [WARN] .env not found — copying from .env.template
     copy .env.template .env >nul
-    echo        Open .env and add your GEMINI_API_KEY before using the LLM features.
+    echo        Edit .env and add your GEMINI_API_KEY.
     echo.
+    pause
 )
 
-REM ── Print startup info ───────────────────────────────────────
+REM ── Startup info ───────────────────────────────────────────
 echo.
 echo ============================================================
 echo   Starting services...
-echo ============================================================
-echo.
-echo   [1/2] Honeypot API    ->  http://localhost:8001
-echo   [2/2] Dashboard       ->  http://localhost:8002
-echo.
-echo   Press Ctrl+C in either window to stop that service.
+echo   [1/2] Honeypot  ->  http://localhost:8001
+echo   [2/2] Dashboard ->  http://localhost:8002
+echo   Press Ctrl+C in either window to stop.
 echo ============================================================
 echo.
 
-REM ── Launch Dashboard in a new window ────────────────────────
-REM    We start dashboard first so it is ready when honeypot fires events.
-start "Maze Myth - Dashboard (port 8002)" cmd /k "call venv\Scripts\activate.bat && echo [DASHBOARD] Starting on http://localhost:8002 && python dashboard\monitor.py"
+REM ── Launch Dashboard in a NEW window ──────────────────────
+REM  We launch _dashboard_start.bat directly to avoid nested-quote
+REM  issues that occur when the project path contains spaces.
+start "Maze Myth - Dashboard" "%~dp0_dashboard_start.bat"
 
-REM ── Small delay so dashboard window appears first ────────────
-timeout /t 2 /nobreak >nul
+REM ── Small delay so dashboard window appears first ──────────
+ping -n 3 127.0.0.1 >nul
 
-REM ── Launch Honeypot in THIS window ──────────────────────────
+REM ── Start Honeypot in THIS window ─────────────────────────
 echo [HONEYPOT] Starting on http://localhost:8001 ...
 echo.
 python honeypot.py
 
-REM ── On exit ─────────────────────────────────────────────────
+REM ── On exit ────────────────────────────────────────────────
 deactivate
 echo.
 echo [INFO] Honeypot stopped. Close the Dashboard window manually.
