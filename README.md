@@ -73,8 +73,6 @@ honeypot.py receives it
 
 ---
 
----
-
 ## ✅ Upgrade Status
 
 | # | Upgrade | Status |
