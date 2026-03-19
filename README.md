@@ -41,6 +41,37 @@ Beacon fires → We track their exact location
     ↓
 Still exploring... forever trapped in the maze
 ```
+---
+
+## How a Request Flows Through the System
+
+```
+Attacker hits any URL
+        │
+        ▼
+honeypot.py receives it
+        │
+        ├─→ Fixed route? (e.g. /api/v1/accounts)
+        │       └─→ BankingDataGenerator generates fresh data
+        │               └─→ Return JSON response
+        │
+        └─→ Dynamic catch-all (unknown path)
+                │
+                ├─→ maze_generator validates path & assigns access level
+                │
+                ├─→ LLMGenerator calls Gemini API with path context
+                │       └─→ Returns realistic JSON
+                │
+                ├─→ 20% chance: FileGenerator creates a bait file
+                │       └─→ Beacon ID saved to SQLite beacons table
+                │
+                ├─→ Response saved to SQLite endpoints table
+                │       (same URL → same AI response forever)
+                │
+                └─→ Return JSON + optional _attachments download link
+```
+
+---
 
 ---
 
