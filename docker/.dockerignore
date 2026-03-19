@@ -1,0 +1,36 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Runtime data (mounted as volumes in container)
+log_files/
+databases/*.json
+databases/*.db
+databases/*.sqlite
+generated_files/
+
+# Dev / editor
+.vscode/
+.idea/
+.env
+*.env.local
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (never bake into image)
+*.key
+*.pem
+*.p12

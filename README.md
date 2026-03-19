@@ -44,28 +44,39 @@ Still exploring... forever trapped in the maze
 
 ---
 
-## 🚀 Key Features (NEW)
+## ✅ Upgrade Status
+
+| # | Upgrade | Status |
+|---|---|---|
+| 1 | Containerize + Docker Compose (Gunicorn) | ✅ Done |
+| 2 | Replace TinyDB with SQLite (WAL mode) | ✅ Done |
+| 3 | LLM Offline Fallback (Ollama) | 🔜 Planned |
+| 4 | Full Config System (`config.yaml`) | 🔜 Planned |
+| 5 | IP Reputation Scoring | 🔜 Planned |
+| 6 | Firewall Export + Auto-Ban | 🔜 Planned |
+| 7 | Tarpit Mode | 🔜 Planned |
+| 8 | Webhook + SIEM Alerts | 🔜 Planned |
+
+> See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment instructions.
+
+---
+
+## 🚀 Key Features
 
 ### 1. Dynamic Data Generator
-Unlike static honeypots, **Maze Myth** generates fresh, realistic data for every request:
-- **Companies**: 8-20 random companies per call
-- **Accounts**: 15-40 accounts with realistic balances ($10k-$50M)
-- **Transactions**: 20-100 unique transactions per account
+Generates fresh, realistic banking data for every request:
+- **Companies**: 8–20 random companies per call
+- **Accounts**: 15–40 accounts with realistic balances ($10k–$50M)
+- **Transactions**: 20–100 unique transactions per account
 - **Payments**: Wire, ACH, SWIFT payments with status tracking
-- **Merchants & Terminals**: Real-looking POS terminal data
 - **Users**: Admin, finance, and report users
 
 ### 2. Multi-Format Bait Files
-We generate tracked files in **10+ formats**, each with embedded beacons:
+Tracked files in **10+ formats**, each with embedded beacons:
 - **PDF**: Financial reports, statements
 - **Excel (.xlsx)**: Transaction spreadsheets
 - **Database (.db, .sqlite)**: Full SQLite databases with tables
-- **CSV**: Data exports
-- **XML**: Audit logs, configuration files
-- **JSON**: API credentials, secrets
-- **JavaScript (.js)**: Terminal configurations
-- **Text (.txt)**: Connection strings, keys
-- **SQL**: Database schema dumps
+- **CSV**: Data exports, XML, JSON credentials, JavaScript configs, SQL schema dumps
 
 ### 3. AI-Powered Responses
 Integration with **Google Gemini 2.0 Flash**:
@@ -74,7 +85,7 @@ Integration with **Google Gemini 2.0 Flash**:
 - Adapts to attacker inputs
 
 ### 4. Real-Time Dashboard
-Monitor the attack as it happens:
+Monitor the attack as it happens on `http://localhost:8002`:
 - **Live Feed**: See every endpoint hit
 - **Download Tracking**: Watch attackers steal files
 - **Beacon Alerts**: Know exactly when a file is opened
@@ -82,126 +93,141 @@ Monitor the attack as it happens:
 
 ---
 
-## � Architecture
+## 📁 Architecture
 
 ```
 Maze-Myth-Dynamic-Honeypot/
-├── honeypot.py           # Main Flask application (35KB)
-├── requirements.txt      # Python dependencies
-├── run_honeypot.bat      # Windows startup script
-├── setup_honeypot.py     # Initial setup script
-├── README.md             # Project documentation
-├── config/               # Configuration
-│   └── .env              # API keys and settings
+├── honeypot.py               # Main Flask application
+├── requirements.txt          # Python dependencies
+├── run_honeypot.bat          # Windows: start everything locally
+├── setup_honeypot.py         # Initial directory setup
+├── DEPLOYMENT.md             # Docker / production guide
 │
-├── src/                  # Core Modules
-│   ├── api_generator/    # API maze and routing logic
-│   ├── data_generator/   # Dynamic banking data generation
-│   ├── file_generator/   # Tracked bait file creation
-│   ├── llm/              # Gemini AI integration
-│   ├── rag/              # RAG context loader
-│   └── state/            # State persistence (TinyDB)
+├── docker/                   # Container files (Upgrade 1)
+│   ├── Dockerfile            # Multi-stage build (honeypot + dashboard targets)
+│   ├── docker-compose.yaml   # One-command production launch
+│   └── .dockerignore
 │
-├── dashboard/            # Monitoring System
-│   ├── index.html        # Dashboard UI
-│   └── monitor.py        # Dashboard backend
+├── .github/workflows/
+│   └── docker-publish.yml    # CI: auto-build & push to GHCR
 │
-├── databases/            # Runtime state storage
-├── generated_files/      # Generated bait files
-└── log_files/            # Encoded audit logs
+├── src/                      # Core Modules
+│   ├── api_generator/        # API maze and routing logic
+│   ├── data_generator/       # Dynamic banking data generation
+│   ├── file_generator/       # Tracked bait file creation
+│   ├── llm/                  # Gemini AI integration
+│   ├── rag/                  # RAG context loader
+│   └── state/                # State persistence
+│
+├── dashboard/                # Monitoring System
+│   ├── index.html            # Dashboard UI
+│   └── monitor.py            # Dashboard Flask backend (port 8002)
+│
+├── databases/                # Runtime state storage
+├── generated_files/          # Generated bait files
+└── log_files/                # Encoded audit logs
 ```
 
 ---
 
-## 🧪 Quick Start
+## 🚀 Quick Start
 
-### 1. Installation
+### Option A — Docker (Recommended, production-ready)
+
+Requires [Docker Desktop](https://docs.docker.com/get-docker/).
+
 ```bash
-# Clone the repo
+# 1. Clone
 git clone https://github.com/Mark-Meka/Maze-Myth-Dynamic-Honeypot.git
 cd Maze-Myth-Dynamic-Honeypot
 
-# Install dependencies
+# 2. Set your API key
+cp .env.template .env
+# Edit .env and add: GEMINI_API_KEY=your_key_here
+
+# 3. Build and start both services
+docker compose -f docker/docker-compose.yaml build
+docker compose -f docker/docker-compose.yaml up -d
+```
+
+| Service | URL |
+|---|---|
+| 🎯 Honeypot API | http://localhost:8001 |
+| 📊 Monitoring Dashboard | http://localhost:8002 |
+
+```bash
+# View live logs
+docker compose -f docker/docker-compose.yaml logs -f
+
+# Stop
+docker compose -f docker/docker-compose.yaml down
+```
+
+---
+
+### Option B — Local Python (Windows, development)
+
+Use **`run_honeypot.bat`** — it handles everything automatically:
+
+```
+Double-click run_honeypot.bat
+```
+
+Or from a terminal:
+
+```cmd
+run_honeypot.bat
+```
+
+The script will:
+1. Check Python is installed
+2. Create and activate the virtual environment
+3. Install all dependencies if missing
+4. Start the **honeypot** on `http://localhost:8001`
+5. Open a second window for the **dashboard** on `http://localhost:8002`
+
+---
+
+### Option C — Manual (any OS)
+
+```bash
+# Clone and install
+git clone https://github.com/Mark-Meka/Maze-Myth-Dynamic-Honeypot.git
+cd Maze-Myth-Dynamic-Honeypot
 pip install -r requirements.txt
-```
 
-### 2. Configuration
-Create a `.env` file in `config/` with your API key:
-```ini
-# config/.env
-GEMINI_API_KEY=your_gemini_api_key
-HONEYPOT_URL=http://localhost:8001
-LLM_MODEL=gemini-2.0-flash
-```
+# Configure
+cp .env.template .env
+# Edit .env: add GEMINI_API_KEY=your_key_here
 
-### 3. Run System
-**Terminal 1: Honeypot**
-```bash
+# Terminal 1 — Honeypot
 python honeypot.py
-# Running on http://0.0.0.0:8001
-```
 
-**Terminal 2: Dashboard**
-```bash
+# Terminal 2 — Dashboard
 python dashboard/monitor.py
-# Running on http://0.0.0.0:8002
 ```
-
-**Access Dashboard**: Open `http://localhost:8002` in your browser.
 
 ---
 
 ## 🎭 Attack Scenario
 
-### 1. Discovery
-Attacker scans and finds `/api/v1/auth/login`. They try credentials `admin:admin`.
-**Response**: Success! Returns a JWT token and breadcrumbs to `/api/v1/users`.
-
-### 2. Exploration
-Attacker lists users.
-**Response**: Returns 12 realistic users (randomized). Hints at `/api/v2/admin`.
-
-### 3. Escalation
-Attacker tries `/api/v2/admin/secrets`.
-**Response**: Lists "encryption_keys.json", "master_api_key.txt".
-
-### 4. Exfiltration
-Attacker downloads `master_api_key.txt`.
-**System Action**:
-- Logs "FILE_DOWNLOAD" event (CRITICAL)
-- Generates unique file with tracking ID
-- Dashboard flashes alert
-
-### 5. Consumption
-Attacker opens the file.
-**System Action**: 
-- Beacon fires (if applicable)
-- Attacker realizes it's fake... or keeps digging into the infinite data.
+1. **Discovery** — Attacker scans and finds `/api/v1/auth/login`. Tries `admin:admin`. Gets a JWT token and breadcrumb to `/api/v1/users`.
+2. **Exploration** — Lists users. Gets 12 realistic randomized users. Hint at `/api/v2/admin`.
+3. **Escalation** — Hits `/api/v2/admin/secrets`. Returns `encryption_keys.json`, `master_api_key.txt`.
+4. **Exfiltration** — Downloads `master_api_key.txt`. A CRITICAL event fires. Dashboard flashes alert. File has embedded tracking beacon.
+5. **Consumption** — Attacker opens the file. Beacon fires. They're tracked — and the maze continues forever.
 
 ---
 
-## 📊 Dashboard Metrics
+## 🔒 Security Warning
 
-The dashboard now provides advanced tracking:
-- **Total Activity**: All hits
-- **File Downloads**: Specific tracking of what files were taken
-- **Sensitive Access**: Highlights attempts to access secrets/admin
-- **Unique endpoints**: Tracks how deep they went
-
----
-
-## 🔒 Security
-
-**⚠️ Warning**: This is a deception tool.
-- Run in an isolated environment (VM/VLAN).
-- Do not expose to your internal network.
-- Monitoring is passive; does not block attacks.
+> ⚠️ This is a deception tool. Run in an isolated environment (VM/container/VLAN). Do not expose the dashboard port (8002) publicly — it is for operators only. Use an SSH tunnel to view it remotely.
 
 ---
 
 ## 📜 License
 
-MIT License - See [LICENSE](LICENSE)
+MIT License — See [LICENSE](LICENSE)
 
 ---
 

@@ -64,31 +64,84 @@ log_dir.mkdir(exist_ok=True)
 
 
 class EncodedFileHandler(logging.FileHandler):
-    """Custom handler that Base64 encodes log messages before writing"""
+    """Base64-encodes every log message before writing to log_files/api_audit.log."""
     def emit(self, record):
         try:
             msg = self.format(record)
-            # Encode the log message
             encoded_msg = base64.b64encode(msg.encode('utf-8')).decode('utf-8')
-            # Write encoded message
             with open(self.baseFilename, 'a', encoding='utf-8') as f:
                 f.write(encoded_msg + '\n')
         except Exception:
             self.handleError(record)
 
 
+class SQLiteLogHandler(logging.Handler):
+    """
+    Writes structured log entries into the `logs` table in honeypot.db.
+    Each entry is plain text (not Base64) and includes:
+      - level      : INFO / WARNING / CRITICAL / ERROR
+      - event      : machine-readable tag extracted from the message
+      - client_ip  : attacker IP extracted from the message
+      - message    : full log line
+
+    This runs in parallel with EncodedFileHandler so the same audit
+    information is available both as a flat encoded file AND as a
+    queryable SQLite table.
+    """
+
+    # Events we recognise and tag in the event column
+    _EVENT_TAGS = [
+        "NEW_ENDPOINT_DISCOVERY",
+        "FILE_DOWNLOAD",
+        "BEACON_ACTIVATED",
+        "BEACON",
+        "AUTH",
+        "MAZE",
+    ]
+
+    def __init__(self, state_manager):
+        super().__init__()
+        self._state = state_manager
+
+    def _extract_ip(self, message: str) -> str:
+        """Pull the first IPv4-looking address out of the log message."""
+        import re
+        m = re.search(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', message)
+        return m.group(1) if m else ""
+
+    def _extract_event(self, message: str) -> str:
+        """Return the first matching event tag found in the message."""
+        for tag in self._EVENT_TAGS:
+            if tag in message:
+                return tag
+        return ""
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self._state.log_entry(
+                level=record.levelname,
+                message=msg,
+                event=self._extract_event(msg),
+                client_ip=self._extract_ip(msg),
+            )
+        except Exception:
+            pass  # never crash the honeypot because of a log write
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        EncodedFileHandler(log_dir / "api_audit.log"),  # Encoded file logs
-        logging.StreamHandler()  # Console logs (not encoded)
+        EncodedFileHandler(log_dir / "api_audit.log"),  # Base64 file log
+        SQLiteLogHandler(state),                         # SQLite structured log
+        logging.StreamHandler()                          # Console (plain text)
     ]
 )
 
 logger = logging.getLogger(__name__)
 
-# CRITICAL: Ensure console handler is attached to logger (Flask may override)
+# Ensure console handler is on the named logger too
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))

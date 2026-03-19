@@ -1,106 +1,174 @@
 # Project Structure Guide
 
 ## Overview
-Dynamic Banking API Honeypot with AI-powered responses and file tracking.
+**Maze Myth** is a dynamic banking API honeypot. It generates realistic-looking API endpoints and fake data on demand using Google Gemini AI, tracks every attacker action in a SQLite database, and serves bait files with embedded beacons.
 
-## Directory Structure
+---
+
+## Directory Tree
 
 ```
 Maze-Myth-Dynamic-Honeypot/
-├── honeypot.py           # Main Flask application (35KB)
-├── requirements.txt      # Python dependencies
-├── run_honeypot.bat      # Windows startup script
-├── setup_honeypot.py     # Initial setup script
-├── README.md             # Project documentation
-├── LICENSE               # MIT License
-├── .gitignore            
 │
-├── config/
-│   └── .env.template     # Environment variables template
-│   └── .env              # Your API keys (create from template)
+├── honeypot.py               ← Main Flask application (all routes)
+├── requirements.txt          ← Python packages
+├── run_honeypot.bat          ← Windows: double-click to start everything
+├── setup_honeypot.py         ← Creates required folders on first run
+├── README.md                 ← Project overview and quick start
+├── DEPLOYMENT.md             ← Docker / VPS deployment guide
+├── SECURITY.md               ← Security notes
+├── LICENSE
+├── .env.template             ← Copy to .env and add your API key
+├── .env                      ← Your secrets (gitignored)
 │
-├── src/                  # Source modules
-│   ├── __init__.py
-│   ├── api_generator/    # API maze and HTTP responses
-│   │   ├── maze_generator.py
-│   │   └── http_responses.py
-│   ├── data_generator/   # Dynamic banking data
-│   │   └── banking_data.py
-│   ├── file_generator/   # Tracked file generation
-│   │   ├── generator.py       # PDF, Excel
-│   │   ├── multi_format_gen.py # XML, CSV, JS, JSON
-│   │   ├── sqlite_gen.py      # SQLite databases
-│   │   └── txt_gen.py         # Text files
-│   ├── llm/              # Gemini AI integration
-│   │   └── llm_integration.py
-│   ├── rag/              # RAG context loader
+├── docker/                   ← Container deployment
+│   ├── Dockerfile            ← Multi-stage: `honeypot` + `dashboard` targets
+│   ├── docker-compose.yaml   ← One command to start both services
+│   └── .dockerignore
+│
+├── .github/workflows/
+│   └── docker-publish.yml    ← Auto-build & push to GHCR on git push
+│
+├── src/                      ← All core logic lives here
+│   │
+│   ├── api_generator/        ← Maze routing and access control
+│   │   ├── maze_generator.py ← Endpoint validity, access levels, breadcrumbs
+│   │   └── http_responses.py ← 401 / 403 / 404 / 500 templates
+│   │
+│   ├── data_generator/       ← Fake banking data
+│   │   └── banking_data.py   ← Generates companies, accounts, transactions, etc.
+│   │
+│   ├── file_generator/       ← Bait file creation
+│   │   ├── generator.py      ← PDF, Excel (.xlsx)
+│   │   ├── multi_format_gen.py ← XML, CSV, JSON, JavaScript
+│   │   ├── sqlite_gen.py     ← Fake .db / .sqlite databases
+│   │   └── txt_gen.py        ← Credential .txt files
+│   │
+│   ├── llm/                  ← AI response generation
+│   │   └── llm_integration.py ← Google Gemini prompts and response handling
+│   │
+│   ├── rag/                  ← Banking domain context for the LLM
 │   │   └── rag_loader.py
-│   └── state/            # State management
-│       └── state_manager.py
+│   │
+│   └── state/                ← SQLite persistence
+│       ├── state_manager.py  ← All DB reads/writes (WAL mode)
+│       └── schema.sql        ← Table definitions (reference)
 │
-├── dashboard/            # Real-time monitoring
-│   ├── index.html        # Dashboard UI
-│   └── monitor.py        # Flask monitoring server
+├── dashboard/                ← Real-time operator monitoring
+│   ├── index.html            ← Dashboard UI (HTML/CSS/JS)
+│   └── monitor.py            ← Flask backend, port 8002
 │
-├── databases/            # Runtime: TinyDB state
-├── generated_files/      # Runtime: Generated bait files
-└── log_files/            # Runtime: Audit logs
+├── docs/                     ← Team documentation
+│   ├── PROJECT_STRUCTURE.md  ← This file
+│   ├── FILE_STRUCTURE_GUIDE.md ← Per-file explanations + "which file to edit"
+│   └── AUDIT_LOGS_GUIDE.md   ← How to read and query logs
+│
+├── databases/                ← Runtime (gitignored)
+│   └── honeypot.db           ← Single SQLite file for all state
+│
+├── generated_files/          ← Runtime: bait files served to attackers
+└── log_files/                ← Runtime: Base64-encoded audit log
+    └── api_audit.log
 ```
 
-## Key Components
+---
 
-### honeypot.py
-Main application with 50+ banking API endpoints:
-- `/companies` - Company management (8-20 dynamic entries)
-- `/api/v1/accounts` - Account data (15-40 entries)
-- `/api/v1/transactions` - Transaction history (20-100 entries)
-- `/api/v1/payments` - Payment processing (10-35 entries)
-- `/merchants` - Merchant management (8-25 entries)
-- `/api/v1/reports` - Report downloads (PDF, CSV, XML, DB)
-- `/api/v2/admin` - Admin panel with secrets
-- `/internal` - Internal config and backups
+## How a Request Flows Through the System
 
-### src/data_generator/banking_data.py
-Generates random banking data on each request:
-- Real-looking IDs (ACC847291038, TXN3847562910)
-- Random company names, balances, dates
-- Varies counts per category on each call
+```
+Attacker hits any URL
+        │
+        ▼
+honeypot.py receives it
+        │
+        ├─→ Fixed route? (e.g. /api/v1/accounts)
+        │       └─→ BankingDataGenerator generates fresh data
+        │               └─→ Return JSON response
+        │
+        └─→ Dynamic catch-all (unknown path)
+                │
+                ├─→ maze_generator validates path & assigns access level
+                │
+                ├─→ LLMGenerator calls Gemini API with path context
+                │       └─→ Returns realistic JSON
+                │
+                ├─→ 20% chance: FileGenerator creates a bait file
+                │       └─→ Beacon ID saved to SQLite beacons table
+                │
+                ├─→ Response saved to SQLite endpoints table
+                │       (same URL → same AI response forever)
+                │
+                └─→ Return JSON + optional _attachments download link
+```
 
-### src/file_generator/
-Generates tracked bait files:
-- **PDF**: Financial reports with embedded beacons
-- **Excel**: Transaction spreadsheets
-- **SQLite/DB**: Fake database files
-- **XML**: Audit logs, webhook configs
-- **CSV**: Transaction exports
-- **JSON**: API credentials, configs
-- **JS**: Terminal configurations
-- **TXT**: Database credentials
+---
 
-### dashboard/
-Real-time monitoring:
-- Tracks all API access
-- Monitors file downloads
-- Alerts on sensitive file access
-- Shows attacker activity
+## Data Flow — Logs
+
+```
+logger.critical("FILE_DOWNLOAD ...")
+        │
+        ├─→ EncodedFileHandler  →  log_files/api_audit.log  (Base64)
+        ├─→ SQLiteLogHandler    →  databases/honeypot.db → logs table (plain SQL)
+        └─→ StreamHandler       →  Console (plain text)
+```
+
+---
+
+## Key Components Explained
+
+### `honeypot.py`
+The entry point. Top section has ~20 fixed routes that always return fresh dynamic data (accounts, transactions, etc.). Bottom section has one `/<path:full_path>` catch-all route that handles everything else by calling the LLM and maze logic.
+
+### `src/state/state_manager.py`
+The single point of contact for the database. All reads and writes go through here. The `APIStateManager` class uses thread-local SQLite connections and WAL mode so multiple gunicorn workers can read/write concurrently without conflicts.
+
+**Tables:**
+| Table | Purpose |
+|---|---|
+| `endpoints` | LLM-generated responses per `(path, method)` — consistent fake data |
+| `objects` | Typed fake objects reused across sessions |
+| `beacons` | Bait file tokens — tracks download and open events |
+| `downloads` | Every `/download/*` hit with IP and user agent |
+| `logs` | Full structured audit log (level, event, IP, message) |
+
+### `src/llm/llm_integration.py`
+Sends a prompt to Gemini like: *"Generate a realistic JSON response for a banking API at GET /api/v2/admin/users, access_level=admin"*. Returns a JSON string that is saved to the `endpoints` table and returned to the attacker.
+
+### `dashboard/monitor.py`
+A separate Flask app (port 8002) that reads `log_files/api_audit.log`, decodes the Base64 lines, and serves them as JSON for the dashboard UI. The operator leaves this open during an engagement.
+
+---
 
 ## Running the System
 
+### Windows (quickest)
+```cmd
+run_honeypot.bat
+```
+Opens two windows — dashboard on 8002, honeypot on 8001.
+
+### Docker (production)
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+cp .env.template .env
+# Edit .env: add GEMINI_API_KEY
+docker compose -f docker/docker-compose.yaml up -d
+```
 
-# Set Gemini API key
-copy config\.env.template config\.env
-# Edit .env with your API key
-
-# Start honeypot (port 8001)
+### Manual (any OS)
+```bash
+# Terminal 1
 python honeypot.py
 
-# Start dashboard (port 8002) - separate terminal
+# Terminal 2
 python dashboard/monitor.py
 ```
 
+---
+
 ## Ports
-- **8001**: Honeypot API
-- **8002**: Dashboard/Monitor
+
+| Port | Service | Audience |
+|---|---|---|
+| **8001** | Honeypot API | **Attackers** — expose this to the internet |
+| **8002** | Dashboard | **Operators only** — never expose publicly |
