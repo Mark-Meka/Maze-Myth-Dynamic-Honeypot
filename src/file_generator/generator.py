@@ -19,7 +19,7 @@ fake = Faker()
 class FileGenerator:
     """Generate tracked bait files (PDF, Excel, config files)"""
     
-    def __init__(self, server_url="http://localhost:8000", output_dir="generated_files"):
+    def __init__(self, server_url="http://localhost:8000", output_dir="generated_files", llm_instance=None):
         """
         Initialize file generator
         
@@ -31,6 +31,7 @@ class FileGenerator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
+        self.llm = llm_instance
     
     def generate_pdf(self, filename, client_ip, content_data=None):
         """
@@ -383,18 +384,24 @@ beacon = {beacon_id}
         
         try:
             if file_type == 'sqlite':
-                sql_gen = SQLiteGenerator(output_dir=str(self.output_dir / "databases"))
+                sql_gen = SQLiteGenerator(output_dir=str(self.output_dir / "databases"), llm_instance=self.llm)
                 filepath, filename = sql_gen.generate_database(rag_context, beacon_id, endpoint_path)
             elif file_type == 'txt':
-                txt_gen = TextFileGenerator(output_dir=str(self.output_dir / "textfiles"))
+                txt_gen = TextFileGenerator(output_dir=str(self.output_dir / "textfiles"), llm_instance=self.llm)
                 filepath, filename = txt_gen.generate_text_file(rag_context, beacon_id, endpoint_path)
             elif file_type == 'pdf':
+                if self.llm and not rag_context:
+                    rag_context = self.llm.generate_file_content("pdf")
                 filepath, _ = self.generate_pdf(f"document_{beacon_id[:8]}.pdf", client_ip, rag_context)
                 filename = filepath.name
             elif file_type == 'env':
+                if self.llm and not rag_context:
+                    rag_context = self.llm.generate_file_content("env")
                 filepath, _ = self.generate_env_file(f"config_{beacon_id[:8]}.env", client_ip, rag_context)
                 filename = filepath.name
             elif file_type == 'excel':
+                if self.llm and not rag_context:
+                    rag_context = self.llm.generate_file_content("excel")
                 filepath, _ = self.generate_excel(f"data_{beacon_id[:8]}.xlsx", client_ip, rag_context)
                 filename = filepath.name
             elif file_type == 'yaml':

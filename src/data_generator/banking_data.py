@@ -14,7 +14,8 @@ fake = Faker()
 class BankingDataGenerator:
     """Generate dynamic banking data that stays consistent during server session"""
     
-    def __init__(self):
+    def __init__(self, llm_instance=None):
+        self.llm = llm_instance
         self.company_prefixes = ["Apex", "Sterling", "Meridian", "Global", "Premier", "Atlas", "Pinnacle", "Summit", "Crown", "Elite", "Pacific", "Northern", "Eastern", "Western", "Central"]
         self.company_suffixes = ["Financial Holdings", "Capital Partners", "Trust Corp", "Banking Group", "Investment Services", "Asset Management", "Securities", "Wealth Management", "Credit Union", "Finance Co"]
         self.account_types = ["business", "corporate", "investment", "savings", "checking", "money_market", "treasury"]
@@ -50,6 +51,17 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(8, 20)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake company records. Each record should have: 'id' (format: COMxxxxxx), 'name' (realistic corporate name), 'status' (active/pending/suspended), 'created' (ISO8601 date), 'accounts' (path: /companies/{{id}}/accounts), 'webhooks' (path: /companies/{{id}}/webhooks), 'apiCredentials' (path: /companies/{{id}}/apiCredentials). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         companies = []
         for _ in range(count):
             cid = self._gen_id("COM", 6)
@@ -75,6 +87,17 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(15, 40)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake bank account records. Each should have: 'id' (format: ACCxxxxxxxxx), 'holder' (company name), 'type' (business/corporate/checking/savings), 'balance' (numeric float between 10k-50m), 'available' (numeric float), 'currency' (USD/EUR/GBP), 'opened' (ISO8601 date), 'status' (active/frozen/closed), 'details' (path: /api/v1/accounts/{{id}}), 'transactions' (path: /api/v1/accounts/{{id}}/transactions), 'statements' (path: /api/v1/accounts/{{id}}/statements). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         accounts = []
         for _ in range(count):
             aid = self._gen_id("ACC", 9)
@@ -104,6 +127,22 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(20, 100)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake bank transactions for account ID '{account_id or 'mixed accounts'}'. Each must have: 'id' (format: TXNxxxxxx), 'amount' (numeric float between -50k and 50k), 'type' (deposit/withdrawal/wire_transfer/payment), 'date' (ISO8601 string, sort by this), 'status' (completed/pending/failed), 'reference' (REFxxxxxx), 'details' (path: /api/v1/transactions/{{id}})"
+            if not account_id:
+                prompt += ", 'from_account' (ACCxxxx), 'to_account' (ACCxxxx)"
+            prompt += ". Return ONLY the array."
+            
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    result = sorted(data, key=lambda x: x.get("date", ""), reverse=True)
+                    self._cache[cache_key] = result
+                    return result
+            except Exception:
+                pass
+                
+        # Fallback
         transactions = []
         for _ in range(count):
             tid = self._gen_id("TXN", 10)
@@ -146,6 +185,17 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(10, 35)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake bank payments. Each must have: 'id' (format: PAYxxxxxx), 'amount' (numeric float), 'currency' (USD/EUR/GBP/CHF), 'method' (wire/ach/swift/internal), 'status' (completed/pending/processing/failed), 'created' (ISO8601 date), 'from_account' (ACCxxxx), 'to_account' (ACCxxxx), 'details' (path: /api/v1/payments/{{id}}), 'receipt' (path: /api/download/payment_receipt_{{id}}.pdf). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         payments = []
         for _ in range(count):
             pid = self._gen_id("PAY", 9)
@@ -174,6 +224,17 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(8, 25)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake merchants. Each must have: 'id' (format: MCHxxxxxxx), 'name' (realistic business name), 'status' (active/suspended/pending), 'created' (ISO8601 date), 'mcc' (4 digit code), 'terminals' (path: /merchants/{{id}}/terminals), 'transactions' (path: /merchants/{{id}}/transactions), 'settlements' (path: /merchants/{{id}}/settlements). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         merchant_types = ["Retail", "Restaurant", "E-commerce", "Services", "Healthcare", "Travel", "Entertainment"]
         merchants = []
         for _ in range(count):
@@ -197,6 +258,16 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(3, 15)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake point-of-sale terminals for merchant '{merchant_id}'. Each must have: 'id' (format: TRMxxxxxx), 'model' (e.g. VX520, Lane3000), 'status' (online/offline/maintenance), 'serial' (SN followed by 12 hex chars), 'last_transaction' (ISO8601 date), 'config' (path: /api/download/terminal_{{id}}_config.js), 'logs' (path: /api/download/terminal_{{id}}_logs.txt). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         models = ["VX520", "VX680", "Lane3000", "P400", "M400", "Ingenico Move5000", "PAX A920"]
         terminals = []
         for i in range(count):
@@ -221,6 +292,17 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(5, 15)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake bank employee/admin users. Each must have: 'id' (format: USRxxxxxx), 'name' (first last), 'email' (corporate email), 'role' (super_admin/admin/finance/support), 'last_login' (ISO8601 date), 'status' (active/locked), 'api_key' (path: /api/download/user_{{id}}_key.txt), 'permissions' (path: /api/v2/admin/users/{{id}}/permissions). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         roles = ["super_admin", "admin", "finance_admin", "operations", "analyst", "support", "auditor"]
         users = []
         for _ in range(count):
@@ -245,6 +327,17 @@ class BankingDataGenerator:
         if cache_key in self._cache:
             return self._cache[cache_key]
         
+        if self.llm:
+            prompt = f"Generate a JSON array of 15-20 fake downloadable banking reports and exports (PDFs, CSVs, JSONs, SQLite DBs). Each must have: 'name' (filename ending in .pdf/.csv/.json/.db/etc), 'type' (the extension Without dot), 'size' (e.g. '2.4 MB', '450 KB'), 'created' (ISO8601 date), 'download' (path: /api/download/{{name}}). Ensure filenames look like sensitive corporate exports (Q4_financials, audit_trail, customer_db, backup). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         report_types = [
             ("Q4_2024_Financial", "pdf", "2.4 MB"),
             ("Annual_Report_2024", "pdf", "8.1 MB"),
@@ -303,6 +396,17 @@ class BankingDataGenerator:
         if count is None:
             count = random.randint(5, 12)
         
+        if self.llm:
+            prompt = f"Generate a JSON array of {count} fake database/server backups. Each must have: 'name' (filename ending in .db/.sqlite/.tar.gz/.zip), 'type' (full/incremental/differential), 'size' (e.g. '1.2 GB', '450 MB'), 'created' (ISO8601 date), 'download' (path: /api/download/{{name}}). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    self._cache[cache_key] = data
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         backups = []
         for i in range(count):
             date = datetime.now() - timedelta(days=i * random.randint(1, 7))
@@ -324,6 +428,16 @@ class BankingDataGenerator:
     
     def generate_secrets(self):
         """Generate list of secrets (high-value targets)"""
+        if self.llm:
+            prompt = f"Generate a JSON array of highly sensitive fake secrets/credentials files (e.g. master keys, database passwords, env files, certs). Each must have: 'name' (secret logical name), 'type' (api_key/encryption/database/webhook), 'download' (path: /api/download/{{filename}}). Return ONLY the array."
+            try:
+                data = self.llm.generate_structured_data(prompt, "json")
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+            except Exception:
+                pass
+                
+        # Fallback
         secrets = [
             {"name": "api_master_key", "type": "api_key", "download": "/api/download/master_api_key.txt"},
             {"name": "encryption_keys", "type": "encryption", "download": "/api/download/encryption_keys.json"},

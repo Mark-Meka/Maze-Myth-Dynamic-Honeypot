@@ -11,9 +11,10 @@ fake = Faker()
 class SQLiteGenerator:
     """Generates realistic SQLite database files with contextual data"""
     
-    def __init__(self, output_dir="generated_files/databases"):
+    def __init__(self, output_dir="generated_files/databases", llm_instance=None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.llm = llm_instance
     
     def generate_database(self, context, beacon_id, endpoint_path="/api/data"):
         """Generate SQLite database with realistic tables and data"""
@@ -28,16 +29,28 @@ class SQLiteGenerator:
         cursor = conn.cursor()
         
         try:
-            if db_type == "customers":
-                self._create_customer_db(cursor, context)
-            elif db_type == "transactions":
-                self._create_transaction_db(cursor, context)
-            elif db_type == "accounts":
-                self._create_account_db(cursor, context)
-            elif db_type == "logs":
-                self._create_logs_db(cursor, context)
-            else:
-                self._create_generic_db(cursor, context)
+            script = None
+            if self.llm:
+                prompt = f"Write a complete, valid SQLite3 script to generate a highly realistic fake banking database named '{filename}'. Include CREATE TABLE statements (at least 2 related tables) and INSERT INTO statements with 10-15 rows of realistic internet banking data. Do NOT use markdown code blocks, return ONLY raw SQL."
+                script = self.llm.generate_structured_data(prompt, "sql")
+                if script:
+                    try:
+                        cursor.executescript(script)
+                        conn.commit()
+                    except Exception as e:
+                        script = None
+            
+            if not script:
+                if db_type == "customers":
+                    self._create_customer_db(cursor, context)
+                elif db_type == "transactions":
+                    self._create_transaction_db(cursor, context)
+                elif db_type == "accounts":
+                    self._create_account_db(cursor, context)
+                elif db_type == "logs":
+                    self._create_logs_db(cursor, context)
+                else:
+                    self._create_generic_db(cursor, context)
             
             # Add beacon tracking table
             self._add_beacon_table(cursor, beacon_id)

@@ -55,6 +55,17 @@ class APIMazeGenerator:
             # Common directories attackers look for
             "admin", "administrator", "login", "wp-admin", "phpmyadmin", 
             "console", "portal", "manage", "manager",
+
+            # ── CVE-2020-36179 File Upload deception paths ──────────────
+            # Spring compliance upload (realistic bank path)
+            "api/v2/documents",
+            "api/v2/documents/compliance-upload",
+            # PHP client-portal upload
+            "clientportal",
+            "clientportal/support",
+            "clientportal/support/attachments.php",
+            # Uploaded files directory (webshell trap)
+            "uploads",
         ]
         
         # Patterns that match dynamic endpoints (ID-based)
@@ -72,6 +83,8 @@ class APIMazeGenerator:
             r"^merchants/[A-Z0-9]+/terminals$",
             r"^api/v2/admin/users/[A-Z0-9]+$",
             r"^api/download/.+$",
+            # CVE-2020-36179: uploaded files webshell trap
+            r"^uploads/.+$",
         ]
         
         self.breadcrumb_templates = {
@@ -262,9 +275,26 @@ Generate a realistic JSON response that:
         
         return response_data
     
-    def generate_auth_response(self, endpoint: str) -> Dict:
+    def generate_auth_response(self, endpoint: str, llm=None) -> Dict:
         """Generate fake authentication responses"""
         
+        if llm:
+            prompt = f"Generate a JSON response for an authentication API call to {endpoint}."
+            if "login" in endpoint:
+                prompt += f" It should indicate success, return a realistic authentication token, and a hint indicating the token should be used in the Authorization header. Use the exact fake token: {self.fake_tokens['user']}"
+            elif "elevate" in endpoint:
+                prompt += f" It should indicate success, return an admin-level authentication token, and a warning that admin endpoints are now available. Use the exact fake token: {self.fake_tokens['admin']}"
+            elif "internal" in endpoint:
+                prompt += f" It should indicate success, granting internal access, and a note about internal debug endpoints. Use the exact fake token: {self.fake_tokens['internal']}"
+            
+            try:
+                res = llm.generate_structured_data(prompt, "json")
+                if isinstance(res, dict) and "error" not in res:
+                    return res
+            except Exception:
+                pass
+                
+        # Fallback to static
         if endpoint == "/api/v1/auth/login":
             return {
                 "success": True,

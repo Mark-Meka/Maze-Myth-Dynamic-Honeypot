@@ -23,6 +23,21 @@ from src.api_generator import APIMazeGenerator
 from src.api_generator.http_responses import HTTPResponseGenerator
 from src.rag import RAGLoader
 from src.data_generator import banking_data
+from src.file_upload_rce import register_file_upload_routes
+
+# Load Environment Variables BEFORE initializing anything else
+try:
+    from dotenv import load_dotenv
+    root_dir = Path(__file__).parent.resolve()
+    env_file = root_dir / ".env"
+    template_file = root_dir / ".env.template"
+    
+    if env_file.exists():
+        load_dotenv(env_file)
+    elif template_file.exists():
+        load_dotenv(template_file)
+except ImportError:
+    pass
 
 # Setup Flask app
 app = Flask(__name__)
@@ -30,13 +45,6 @@ app.config['JSON_SORT_KEYS'] = False
 
 # Enable CORS
 CORS(app, resources={r"/*": {"origins": "*"}})
-
-# Initialize
-state = APIStateManager()
-fake = Faker()
-file_gen = FileGenerator(server_url="http://localhost:8001")
-maze = APIMazeGenerator()  # API Maze Generator
-http_resp = HTTPResponseGenerator()  # HTTP Response Generator
 
 # Load RAG banking context
 try:
@@ -48,7 +56,6 @@ except Exception as e:
     rag = None
     rag_enabled = False
 
-
 try:
     llm = LLMGenerator()
     llm_enabled = True
@@ -57,6 +64,16 @@ except Exception as e:
     print(f"[MAZE] LLM Init Failed: {e}")
     llm = None
     llm_enabled = False
+
+# Initialize
+state = APIStateManager()
+fake = Faker()
+file_gen = FileGenerator(server_url="http://localhost:8001", llm_instance=llm)
+maze = APIMazeGenerator()  # API Maze Generator
+http_resp = HTTPResponseGenerator()  # HTTP Response Generator
+if llm_enabled:
+    banking_data.llm = llm
+
 
 # Logging with Base64 encoding
 log_dir = Path("log_files")
@@ -147,6 +164,9 @@ console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(console_handler)
 logger.setLevel(logging.INFO)
+
+# Register CVE-2020-36179 File Upload RCE deception module
+register_file_upload_routes(app, state_manager=state, app_logger=logger)
 
 # ===== SPECIFIC ROUTES (these have priority) =====
 
@@ -468,7 +488,7 @@ def fake_login():
     client_ip = request.remote_addr
     logger.warning(f"[AUTH] Login attempt from {client_ip}")
     
-    return jsonify(maze.generate_auth_response("/api/v1/auth/login"))
+    return jsonify(maze.generate_auth_response("/api/v1/auth/login", llm=llm))
 
 @app.route("/api/v1/auth/elevate", methods=["POST"])
 def fake_elevate():
@@ -482,7 +502,7 @@ def fake_elevate():
         }), 401
     
     logger.warning(f"[AUTH] Elevation request with token: {authorization[:20]}...")
-    return jsonify(maze.generate_auth_response("/api/v1/auth/elevate"))
+    return jsonify(maze.generate_auth_response("/api/v1/auth/elevate", llm=llm))
 
 @app.route("/api/v1/auth/internal", methods=["POST"])
 def fake_internal_auth():
@@ -496,7 +516,7 @@ def fake_internal_auth():
         }), 403
     
     logger.critical(f"[AUTH] Internal access granted!")
-    return jsonify(maze.generate_auth_response("/api/v1/auth/internal"))
+    return jsonify(maze.generate_auth_response("/api/v1/auth/internal", llm=llm))
 
 # ===== FILE DOWNLOAD & TRACKING =====
 
@@ -746,6 +766,35 @@ def generate_contextual_file(path, client_ip):
     
     return None
 
+# ===== CVE-2020-36179 FILE UPLOAD TRAP — Explicit Routes =====
+# These MUST be defined here (before the /<path:full_path> catch-all)
+# so Flask resolves them first. They proxy to the module functions.
+
+@app.route("/api/v2/documents/compliance-upload", methods=["GET"])
+def cve_spring_upload_get():
+    from src.file_upload_rce import _route_spring_upload_get
+    return _route_spring_upload_get()
+
+@app.route("/api/v2/documents/compliance-upload", methods=["POST"])
+def cve_spring_upload_post():
+    from src.file_upload_rce import _route_spring_upload_post
+    return _route_spring_upload_post()
+
+@app.route("/clientportal/support/attachments.php", methods=["GET"])
+def cve_php_upload_get():
+    from src.file_upload_rce import _route_php_upload_get
+    return _route_php_upload_get()
+
+@app.route("/clientportal/support/attachments.php", methods=["POST"])
+def cve_php_upload_post():
+    from src.file_upload_rce import _route_php_upload_post
+    return _route_php_upload_post()
+
+@app.route("/uploads/<path:filename>", methods=["GET"])
+def cve_webshell_get(filename):
+    from src.file_upload_rce import _route_webshell_get
+    return _route_webshell_get(filename)
+
 # ===== DYNAMIC CATCH-ALL WITH MAZE LOGIC =====
 
 @app.route("/<path:full_path>", methods=["GET", "POST", "PUT", "DELETE"])
@@ -758,11 +807,34 @@ def dynamic_endpoint(full_path):
         client_ip = request.remote_addr
         authorization = request.headers.get('Authorization')
         user_agent = request.headers.get('User-Agent', '')
-        
-        # DEBUG: Print every request hitting catch-all
+
+        # ── File-upload module bypass ────────────────────────────────────────
+        # These paths are owned by the CVE-2020-36179 module registered via
+        # register_file_upload_routes(). The /<path:full_path> catch-all can
+        # still match them in Flask's routing order, so we forward manually.
+        _UPLOAD_MODULE_PATHS = {
+            "api/v2/documents/compliance-upload",
+            "clientportal/support/attachments.php",
+        }
+        _UPLOAD_MODULE_PREFIXES = ("uploads/",)
+
+        _fp_lower = full_path.rstrip("/")
+        if _fp_lower in _UPLOAD_MODULE_PATHS or any(_fp_lower.startswith(p) for p in _UPLOAD_MODULE_PREFIXES):
+            view_name_map = {
+                ("api/v2/documents/compliance-upload", "GET"):  "spring_upload_get",
+                ("api/v2/documents/compliance-upload", "POST"): "spring_upload_post",
+                ("clientportal/support/attachments.php", "GET"):  "php_upload_get",
+                ("clientportal/support/attachments.php", "POST"): "php_upload_post",
+            }
+            fn_name = view_name_map.get((_fp_lower, method))
+            if fn_name and fn_name in app.view_functions:
+                return app.view_functions[fn_name]()
+            if _fp_lower.startswith("uploads/") and "webshell_get" in app.view_functions:
+                filename_part = full_path[len("uploads/"):]
+                return app.view_functions["webshell_get"](filename=filename_part)
+        # ── End file-upload bypass ───────────────────────────────────────────
+
         is_valid = maze.is_valid_endpoint(full_path, user_agent)
-        print(f"[DEBUG] /{full_path} | valid={is_valid}", flush=True)
-        
         # Determine access level based on path and token
         access_level = maze.determine_access_level(full_path, authorization)
         
@@ -776,6 +848,7 @@ def dynamic_endpoint(full_path):
                 "message": f"The requested URL was not found on this server.",
                 "path": f"/{full_path}"
             }), 404
+
         
         
         # Log directory scanning (detect gobuster, dirsearch, etc)
@@ -792,7 +865,7 @@ def dynamic_endpoint(full_path):
         )
         
         if should_error:
-            error_response = http_resp.get_response_for_status(status_code, f"/{full_path}")
+            error_response = http_resp.get_response_for_status(status_code, f"/{full_path}", llm=llm if llm_enabled else None)
             if error_response:
                 logger.info(f"[HTTP] {status_code} response for /{full_path} - {access_level} access")
                 return jsonify(error_response['response']), error_response['status_code'], error_response.get('headers', {})

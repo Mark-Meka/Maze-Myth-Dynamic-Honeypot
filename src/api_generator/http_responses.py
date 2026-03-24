@@ -158,8 +158,34 @@ class HTTPResponseGenerator:
         return (False, 200)
 
     
-    def get_response_for_status(self, status_code, path, **kwargs):
-        """Get appropriate response for status code"""
+    def get_response_for_status(self, status_code, path, llm=None, **kwargs):
+        """Get appropriate response for status code, dynamically if LLM is provided"""
+        if llm:
+            prompt = f"Generate a realistic JSON API error response for an HTTP {status_code} error at the endpoint '{path}'."
+            if status_code == 401:
+                prompt += " Include a 401 Unauthorized message, a timestamp, and a hint to authenticate at /api/v1/auth/login."
+            elif status_code == 403:
+                role = kwargs.get('required_role', 'admin')
+                prompt += f" Include a 403 Forbidden message indicating the required role '{role}' and a hint to elevate privileges."
+            elif status_code == 404:
+                prompt += " Include a 404 Not Found message and an array of hints showing available base endpoints."
+            elif status_code == 400:
+                prompt += " Include a 400 Bad Request message with an array of realistic validation errors for that endpoint."
+            elif status_code == 500:
+                prompt += " Include a 500 Internal Server Error message and a unique Request ID."
+                
+            try:
+                err_content = llm.generate_structured_data(prompt, "json")
+                if isinstance(err_content, dict) and "error" not in err_content:
+                    return {
+                        'status_code': status_code,
+                        'response': err_content,
+                        'headers': {'Content-Type': 'application/json'}
+                    }
+            except Exception:
+                pass
+                
+        # Fallback to static
         if status_code == 401:
             return self.generate_401_unauthorized(path)
         elif status_code == 403:

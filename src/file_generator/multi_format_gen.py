@@ -16,23 +16,30 @@ fake = Faker()
 class MultiFormatGenerator:
     """Generate tracked bait files in various formats"""
     
-    def __init__(self, output_dir="generated_files"):
+    def __init__(self, output_dir="generated_files", llm_instance=None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.llm = llm_instance
     
     def generate_xml(self, filename, client_ip, file_type="audit"):
         """Generate XML file with embedded beacon reference"""
         beacon_id = str(uuid.uuid4())
         filepath = self.output_dir / f"{beacon_id}.xml"
         
-        if "audit" in filename.lower() or "log" in filename.lower():
-            content = self._generate_audit_xml(beacon_id, client_ip)
-        elif "config" in filename.lower() or "webhook" in filename.lower():
-            content = self._generate_config_xml(beacon_id)
-        elif "transaction" in filename.lower():
-            content = self._generate_transaction_xml(beacon_id)
-        else:
-            content = self._generate_generic_xml(beacon_id)
+        content = None
+        if self.llm:
+            prompt = f"Generate 50 lines of highly realistic banking '{file_type}' data in XML format. Include an XML comment on line 2 exactly like this: <!-- Document ID: {beacon_id} -->. Name of the file requested is {filename}."
+            content = self.llm.generate_structured_data(prompt, "xml")
+            
+        if not content:
+            if "audit" in filename.lower() or "log" in filename.lower():
+                content = self._generate_audit_xml(beacon_id, client_ip)
+            elif "config" in filename.lower() or "webhook" in filename.lower():
+                content = self._generate_config_xml(beacon_id)
+            elif "transaction" in filename.lower():
+                content = self._generate_transaction_xml(beacon_id)
+            else:
+                content = self._generate_generic_xml(beacon_id)
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -135,14 +142,20 @@ class MultiFormatGenerator:
         beacon_id = str(uuid.uuid4())
         filepath = self.output_dir / f"{beacon_id}.csv"
         
-        if "transaction" in filename.lower():
-            content = self._generate_transaction_csv(beacon_id)
-        elif "customer" in filename.lower() or "user" in filename.lower():
-            content = self._generate_customer_csv(beacon_id)
-        elif "account" in filename.lower():
-            content = self._generate_account_csv(beacon_id)
-        else:
-            content = self._generate_summary_csv(beacon_id)
+        content = None
+        if self.llm:
+            prompt = f"Generate 50 lines of highly realistic banking CSV data for a file named '{filename}'. The first line MUST be: # Export ID: {beacon_id} followed by realistic banking headers and data."
+            content = self.llm.generate_structured_data(prompt, "csv")
+            
+        if not content:
+            if "transaction" in filename.lower():
+                content = self._generate_transaction_csv(beacon_id)
+            elif "customer" in filename.lower() or "user" in filename.lower():
+                content = self._generate_customer_csv(beacon_id)
+            elif "account" in filename.lower():
+                content = self._generate_account_csv(beacon_id)
+            else:
+                content = self._generate_summary_csv(beacon_id)
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -206,10 +219,16 @@ class MultiFormatGenerator:
         beacon_id = str(uuid.uuid4())
         filepath = self.output_dir / f"{beacon_id}.js"
         
-        if "terminal" in filename.lower():
-            content = self._generate_terminal_config_js(beacon_id)
-        else:
-            content = self._generate_api_config_js(beacon_id)
+        content = None
+        if self.llm:
+            prompt = f"Generate highly realistic Javascript (Node.js/Frontend) configuration variables for a banking endpoint file named '{filename}'. Must include inline javascript comment: // Config ID: {beacon_id}. Return only the JS code."
+            content = self.llm.generate_structured_data(prompt, "js")
+            
+        if not content:
+            if "terminal" in filename.lower():
+                content = self._generate_terminal_config_js(beacon_id)
+            else:
+                content = self._generate_api_config_js(beacon_id)
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -293,14 +312,22 @@ module.exports = {{
         beacon_id = str(uuid.uuid4())
         filepath = self.output_dir / f"{beacon_id}.json"
         
-        if "credential" in filename.lower() or "key" in filename.lower():
-            content = self._generate_credentials_json(beacon_id)
-        elif "audit" in filename.lower():
-            content = self._generate_audit_json(beacon_id)
-        elif "config" in filename.lower():
-            content = self._generate_config_json(beacon_id)
-        else:
-            content = self._generate_generic_json(beacon_id)
+        content = None
+        if self.llm:
+            prompt = f"Generate highly realistic JSON data for a corporate banking file named '{filename}'. Include a root-level key '_document_id' with the exact value '{beacon_id}'."
+            data = self.llm.generate_structured_data(prompt, "json")
+            if isinstance(data, dict) or isinstance(data, list):
+                content = json.dumps(data, indent=2)
+                
+        if not content:
+            if "credential" in filename.lower() or "key" in filename.lower():
+                content = self._generate_credentials_json(beacon_id)
+            elif "audit" in filename.lower():
+                content = self._generate_audit_json(beacon_id)
+            elif "config" in filename.lower():
+                content = self._generate_config_json(beacon_id)
+            else:
+                content = self._generate_generic_json(beacon_id)
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)

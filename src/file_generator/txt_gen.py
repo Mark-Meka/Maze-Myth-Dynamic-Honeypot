@@ -10,9 +10,10 @@ fake = Faker()
 class TextFileGenerator:
     """Generates realistic text files (logs, configs, credentials)"""
     
-    def __init__(self, output_dir="generated_files/textfiles"):
+    def __init__(self, output_dir="generated_files/textfiles", llm_instance=None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.llm = llm_instance
     
     def generate_text_file(self, context, beacon_id, endpoint_path="/api/config"):
         """Generate text file based on endpoint context"""
@@ -51,7 +52,13 @@ class TextFileGenerator:
         filename = f"production_{random.choice(['v1', 'v2', 'main', 'prod'])}.env"
         filepath = self.output_dir / filename
         
-        content = f"""# Production Environment Configuration
+        content = None
+        if self.llm:
+            prompt = f"Generate highly realistic production environment variables for a banking backend. Include database credentials, API keys, AWS credentials, and Redis configuration. Embed the tracking ID exactly like this at the end: TRACKING_ID={beacon_id}"
+            content = self.llm.generate_structured_data(prompt, "txt")
+            
+        if not content:
+            content = f"""# Production Environment Configuration
 # Generated: {datetime.utcnow().isoformat()}
 # DO NOT COMMIT TO VERSION CONTROL
 
@@ -106,9 +113,15 @@ TRACKING_ID={beacon_id}
         filename = f"system_audit_{datetime.now().strftime('%Y%m%d')}.log"
         filepath = self.output_dir / filename
         
-        lines = []
-        lines.append(f"# System Audit Log - Generated {datetime.utcnow().isoformat()}")
-        lines.append(f"# Tracking: {beacon_id}\n")
+        content = None
+        if self.llm:
+            prompt = f"Generate 50 lines of highly realistic banking system audit logs showing logins, API calls, and mixed events. First line MUST be: # System Audit Tracking: {beacon_id} followed by realistic log lines."
+            content = self.llm.generate_structured_data(prompt, "txt")
+            
+        if not content:
+            lines = []
+            lines.append(f"# System Audit Log - Generated {datetime.utcnow().isoformat()}")
+            lines.append(f"# Tracking: {beacon_id}\n")
         
         # Generate log entries
         for _ in range(random.randint(100, 500)):
@@ -136,7 +149,13 @@ TRACKING_ID={beacon_id}
         filename = f"app_config_{random.choice(['prod', 'staging', 'main'])}.conf"
         filepath = self.output_dir / filename
         
-        content = f"""# Application Configuration File
+        content = None
+        if self.llm:
+            prompt = f"Generate highly realistic INI config file (.conf) for a corporate banking API server. Include sections for database, api, security, logging, and performance. Include a hidden beacon exactly like this at the top: # Beacon: {beacon_id}"
+            content = self.llm.generate_structured_data(prompt, "txt")
+            
+        if not content:
+            content = f"""# Application Configuration File
 # Last Modified: {datetime.utcnow().isoformat()}
 # Beacon: {beacon_id}
 

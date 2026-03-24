@@ -6,12 +6,13 @@ import google.generativeai as genai
 import os
 import json
 import logging
+from pathlib import Path
 
 
 class LLMGenerator:
     """Generate realistic API responses using Google Gemini"""
     
-    def __init__(self, api_key="AIzaSyC0PVSenpHFc87mRxu7hogzewqpL8sTxuY", model="gemini-2.0-flash"):
+    def __init__(self, api_key=None, model=None):
         """
         Initialize Gemini generator
         
@@ -19,12 +20,25 @@ class LLMGenerator:
             api_key: Google API key (or set GOOGLE_API_KEY env var)
             model: Model to use (gemini-pro, gemini-1.5-pro, etc.)
         """
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        try:
+            from dotenv import load_dotenv
+            env_path = Path(__file__).parent.parent.parent.resolve() / ".env"
+            template_path = Path(__file__).parent.parent.parent.resolve() / ".env.template"
+            
+            if env_path.exists():
+                load_dotenv(env_path)
+            elif template_path.exists():
+                load_dotenv(template_path)
+        except ImportError:
+            pass
+
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
-            raise Exception("Google API key not found. Set GOOGLE_API_KEY environment variable.")
+            raise Exception("Google API key not found. Set GEMINI_API_KEY in .env")
         
+        target_model = model or os.getenv("LLM_MODEL", "gemini-2.5-flash")
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel(model)
+        self.model = genai.GenerativeModel(target_model)
         self.logger = logging.getLogger(__name__)
     
     def generate_api_response(self, path, method, context=None, rag_context=None):
@@ -241,3 +255,47 @@ Return ONLY valid JSON, no markdown, no code blocks."""
         except Exception as e:
             self.logger.error(f"File content generation failed: {e}")
             return {"error": "Could not generate content"}
+            
+    def generate_structured_data(self, prompt, expected_format="json"):
+        """
+        Generic helper to generate and cleanly extract structured data from Gemini,
+        removing any conversational wrapping or markdown code blocks.
+        
+        Args:
+            prompt: Instructions for Gemini
+            expected_format: json, csv, xml, sql, txt, js
+        """
+        # Enforce no conversational filler
+        structured_prompt = prompt + f"\n\nReturn ONLY the raw {expected_format.upper()} data. Do not include markdown codeblocks, explanations, or conversational filler."
+        
+        try:
+            response = self.model.generate_content(structured_prompt)
+            content = response.text.strip()
+            
+            # Remove any markdown wrapping if the LLM hallucinated it anyway
+            if content.startswith("```"):
+                lines = content.split("\n")
+                if len(lines) > 2:
+                    content = "\n".join(lines[1:-1])
+                else:
+                    content = content.replace("```" + expected_format, "").replace("```", "").strip()
+            
+            # Final clean up
+            if expected_format.lower() == "json":
+                # Double check it parses
+                try:
+                    return json.loads(content)
+                except Exception:
+                    # try to fix common trailing commas or bad escapes
+                    content = content.strip()
+                    if content.startswith("{") or content.startswith("["):
+                        return json.loads(content)
+                    return content # return as string if we absolutely can't parse it
+            else:
+                return content
+                
+        except Exception as e:
+            self.logger.error(f"Structured data generation failed: {e}")
+            if expected_format == "json":
+                return {"error": "Generation failed"}
+            return ""
