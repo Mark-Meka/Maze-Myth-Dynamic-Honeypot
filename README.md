@@ -57,31 +57,30 @@ sequenceDiagram
     participant A as Attacker
     participant H as Honeypot
     participant RAG as Shell RAG
-    participant G as Gemini LLM
-    participant I as Intel Engine
+    participant I as Intel
 
-    A->>H: GET /clientportal/support/attachments.php
+    A->>H: GET /attachments.php
     H->>I: record_form_view(ip)
-    H-->>A: Realistic PHP form
+    H-->>A: PHP upload form
 
-    Note right of A: POST shell.php<br/>&lt;?php system($_GET['cmd']); ?&gt;
+    Note right of A: POST shell.php webshell
     H->>I: record_upload(ip,file)
-    Note over H: Detects webshell<br/>No disk write
-    H-->>A: Upload success URL
+    Note over H: Detects webshell - no disk write
+    H-->>A: Success + URL
 
-    A->>H: GET /uploads/shell.php?cmd=whoami
-    H->>I: record_webshell_access(ip,cmd)
-    H->>RAG: resolve_shell_command(whoami)
+    A->>H: GET /shell.php?cmd=whoami
+    H->>I: record_cmd(ip,cmd)
+    H->>RAG: resolve(whoami)
     Note over RAG: Cache > TF-IDF > LLM fallback
     RAG-->>H: www-data
     H-->>A: www-data
 
-    Note right of A: Revshell cmd example
+    Note right of A: Revshell cmd
     H->>I: record_revshell(ip)
-    Note over H: Simulate hang (1.5s empty)
-    H-->>A: (timeout)
+    Note over H: Simulate 1.5s timeout
+    H-->>A: Empty response
 
-    A->>H: GET /api/dashboard/.../attacker/IP
+    A->>H: GET /dashboard/.../attacker/IP
     Note over H: Full profile: geo/phase/risk
 ```
 
