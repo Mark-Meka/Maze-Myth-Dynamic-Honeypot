@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Maze Myth | Intelligence Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080c14;--bg2:#0d1220;--bg3:#111827;
+  --border:rgba(0,243,255,.12);--border2:rgba(0,243,255,.25);
+  --cyan:#00f3ff;--gold:#f59e0b;--red:#ef4444;
+  --green:#10b981;--purple:#8b5cf6;--orange:#f97316;
+  --text:#e2e8f0;--muted:#64748b;--card:rgba(13,18,32,.9)
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* layout */
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 24px;background:var(--bg2);border-bottom:1px solid var(--border2)}
+.logo{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:700;
+  background:linear-gradient(135deg,var(--cyan),var(--gold));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.status-pill{display:flex;align-items:center;gap:7px;padding:5px 14px;
+  background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);
+  border-radius:20px;font-size:10px;font-weight:600;color:var(--green);
+  font-family:'JetBrains Mono',monospace}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+
+/* tabs */
+.tabs{display:flex;gap:2px;padding:0 24px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.tab{padding:9px 18px;font-size:11px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;
+  color:var(--muted);transition:color .2s,border-color .2s;font-family:'JetBrains Mono',monospace;letter-spacing:.06em}
+.tab:hover{color:var(--cyan)}.tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+
+/* panels */
+.content{padding:18px 24px;overflow-y:auto;height:calc(100vh - 88px)}
+.panel{display:none}.panel.active{display:block}
+
+/* stat row */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:14px;text-align:center}
+.sv{font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace;
+  background:linear-gradient(180deg,var(--cyan),#0099ff);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sv.r{background:linear-gradient(180deg,var(--red),#a00)}
+.sv.g{background:linear-gradient(180deg,var(--gold),#c47d00)}
+.sv.gr{background:linear-gradient(180deg,var(--green),#047857)}
+.sv.p{background:linear-gradient(180deg,var(--purple),#5b21b6)}
+.sl{font-size:9px;color:var(--muted);margin-top:3px;letter-spacing:.05em;
+  font-weight:600;text-transform:uppercase}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.card-hdr{padding:10px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:10px;font-weight:700;color:var(--cyan);
+  text-transform:uppercase;letter-spacing:.1em;font-family:'JetBrains Mono',monospace}
+.card-body{padding:12px 14px}
+
+/* grid */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+@media(max-width:860px){.g2,.g3{grid-template-columns:1fr}}
+
+/* feed */
+.feed{max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;padding:8px 12px}
+.feed-item{padding:8px 12px;border-radius:6px;border-left:3px solid var(--border2);
+  background:rgba(255,255,255,.02);animation:slideIn .2s ease;font-size:11px;line-height:1.5}
+.feed-item.critical,.feed-item.webshell,.feed-item.webshell_upload{border-left-color:var(--red);background:rgba(239,68,68,.06)}
+.feed-item.warning,.feed-item.dangerous_upload{border-left-color:var(--gold)}
+.feed-item.beacon{border-left-color:var(--red)}
+.feed-item.download{border-left-color:var(--gold)}
+.feed-item.discovery{border-left-color:var(--cyan)}
+.feed-item.auth{border-left-color:var(--purple)}
+.feed-ts{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+.feed-msg{color:var(--text)}
+
+/* phase badge */
+.phase-badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:9px;
+  font-weight:700;letter-spacing:.06em;font-family:'JetBrains Mono',monospace}
+.phase-IDLE{background:rgba(100,116,139,.2);color:#94a3b8;border:1px solid #475569}
+.phase-RECON{background:rgba(0,243,255,.12);color:var(--cyan);border:1px solid rgba(0,243,255,.3)}
+.phase-EXPLOIT{background:rgba(245,158,11,.12);color:var(--gold);border:1px solid rgba(245,158,11,.3)}
+.phase-POST_EXPLOIT{background:rgba(239,68,68,.14);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.phase-LATERAL{background:rgba(139,92,246,.14);color:var(--purple);border:1px solid rgba(139,92,246,.3)}
+
+/* engagement bar */
+.eng-wrap{display:flex;align-items:center;gap:8px;margin-top:5px}
+.eng-bar{flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
+.eng-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--cyan),var(--purple));transition:width .6s}
+.eng-val{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--cyan);min-width:28px;text-align:right}
+
+/* attacker card */
+.a-card{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s}
+.a-card:hover{border-color:var(--border2)}
+.a-ip{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--cyan)}
+.a-geo{font-size:10px;color:var(--muted);margin-top:2px}
+.a-stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:7px}
+.ast{font-size:10px;font-family:'JetBrains Mono',monospace}
+.ast.d{color:var(--red)}.ast.w{color:var(--gold)}.ast.g{color:var(--green)}
+
+/* commands */
+.cmd-row{display:flex;align-items:center;gap:8px;padding:5px 0;
+  border-bottom:1px solid var(--border);font-size:10px;font-family:'JetBrains Mono',monospace}
+.cmd-score{min-width:28px;text-align:center;font-weight:700}
+.s0{color:var(--green)}.s1{color:var(--gold)}.s2{color:var(--orange)}.s3{color:var(--red)}
+.cmd-txt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.cmd-lbl{color:var(--muted);font-size:9px;white-space:nowrap}
+
+/* analysis */
+.ai-box{background:rgba(8,12,20,.7);border:1px solid var(--border);border-radius:7px;
+  padding:14px;font-size:12px;line-height:1.8;color:#cbd5e1;
+  white-space:pre-wrap;max-height:460px;overflow-y:auto}
+.ai-box strong,.ai-box b{color:var(--cyan)}
+
+/* button */
+.btn{padding:7px 15px;border:1px solid var(--border2);border-radius:6px;
+  background:rgba(0,243,255,.08);color:var(--cyan);font-size:10px;font-weight:700;
+  cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .2s}
+.btn:hover{background:rgba(0,243,255,.18)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);
+  z-index:100;align-items:center;justify-content:center;padding:20px;display:none}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;
+  width:100%;max-width:820px;max-height:88vh;overflow-y:auto;padding:22px}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.modal-title{font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--cyan)}
+
+/* phase track */
+.phase-track{display:flex;margin:10px 0 16px}
+.ps{flex:1;padding:6px 4px;text-align:center;font-size:8px;font-weight:700;
+  letter-spacing:.06em;border-top:3px solid var(--border);color:var(--muted);text-transform:uppercase}
+.ps.active-RECON{border-color:var(--cyan);color:var(--cyan)}
+.ps.active-EXPLOIT{border-color:var(--gold);color:var(--gold)}
+.ps.active-POST_EXPLOIT{border-color:var(--red);color:var(--red)}
+.ps.active-LATERAL{border-color:var(--purple);color:var(--purple)}
+
+/* section label */
+.slbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--muted);margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.35)}}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+</style>
+</head>
+<body>
+
+<!-- top bar -->
+<div class="topbar">
+  <div class="logo">⬡ MAZE MYTH</div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <span style="font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace" id="last-update">—</span>
+    <div class="status-pill"><div class="live-dot"></div>MONITORING ACTIVE</div>
+  </div>
+</div>
+
+<!-- tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="tab('overview')" id="tab-overview">LIVE MONITOR</div>
+  <div class="tab" onclick="tab('attackers')" id="tab-attackers">ATTACKERS <span id="atk-cnt" style="background:rgba(239,68,68,.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:9px">0</span></div>
+  <div class="tab" onclick="tab('analysis')" id="tab-analysis">AI ANALYSIS</div>
+  <div class="tab" onclick="tab('files')" id="tab-files">FILES</div>
+</div>
+
+<div class="content">
+
+<!-- ═══ LIVE MONITOR (overview + feed combined) ════════════ -->
+<div class="panel active" id="panel-overview">
+  <!-- Counters row (text only, no color cards) -->
+  <div style="display:flex;flex-wrap:wrap;gap:18px;padding:8px 0 14px;border-bottom:1px solid var(--border);margin-bottom:14px;font-family:'JetBrains Mono',monospace;font-size:11px">
+    <span style="color:var(--muted)">Visitors: <b id="s-attackers" style="color:var(--cyan)">0</b></span>
+    <span style="color:var(--muted)">Downloads: <b id="s-downloads" style="color:var(--cyan)">0</b></span>
+    <span style="color:var(--muted)">Beacons: <b id="s-beacons" style="color:var(--red)">0</b></span>
+    <span style="color:var(--muted)">Endpoints: <b id="s-endpoints" style="color:var(--cyan)">0</b></span>
+    <span style="color:var(--muted)">Webshells: <b id="s-webshells" style="color:var(--red)">0</b></span>
+    <span style="color:var(--muted)">RevShells: <b id="s-revshells" style="color:var(--red)">0</b></span>
+    <span style="color:var(--muted)">Uploads: <b id="s-uploads" style="color:var(--gold)">0</b></span>
+    <span style="color:var(--muted)">Commands: <b id="s-commands" style="color:var(--purple)">0</b></span>
+  </div>
+
+  <!-- live feed takes rest of page -->
+  <div class="card" style="height:calc(100vh - 195px)">
+    <div class="card-hdr">
+      <span class="card-title">🟥 Live Event Feed</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" onclick="clearFeed()">Clear</button>
+        <span style="font-size:9px;color:var(--muted)" id="feed-cnt">0 events</span>
+        <span style="font-size:9px;color:var(--muted)" id="evt-cnt"></span>
+      </div>
+    </div>
+    <div class="feed" id="overview-feed" style="max-height:none;height:calc(100% - 42px)">
+      <div class="feed-item" style="color:var(--muted)">Waiting for activity…</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ ATTACKERS ════════════════════════════════════ -->
+<div class="panel" id="panel-attackers">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;text-transform:uppercase" id="atk-hdr">0 Attackers</div>
+    <button class="btn" onclick="loadAttackers()">↻ Refresh</button>
+  </div>
+  <div id="atk-list"><span style="color:var(--muted);font-size:11px">No attackers yet.</span></div>
+</div>
+
+
+<!-- ═══ AI ANALYSIS ════════════════════════════════════ -->
+<div class="panel" id="panel-analysis">
+  <div class="g3">
+    <div>
+      <!-- cross-attacker -->
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title">🧠 All Attackers — Behavioral Analysis</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="btn-all" onclick="analyzeAll()">▶ Run</button>
+            <button class="btn" id="btn-dl-all" onclick="downloadAnalysis('ai-all', 'All_Attackers_Intel_Report.md')" disabled>⬇ Export</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="ai-box" id="ai-all">Click "Run" to generate a Gemini-powered behavioral study across all recorded attacker sessions.</div>
+        </div>
+      </div>
+      <!-- per-IP -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">🎯 Per-Attacker Deep Analysis</span></div>
+        <div class="card-body">
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <select id="ip-sel" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:11px;font-family:'JetBrains Mono',monospace">
+              <option value="">Select attacker IP…</option>
+            </select>
+            <button class="btn" id="btn-ip" onclick="analyzeIP()">▶ Analyze</button>
+            <button class="btn" id="btn-dl-ip" onclick="downloadAnalysis('ai-ip', 'Attacker_Intel_' + document.getElementById('ip-sel').value.replace(/\./g,'_') + '.md')" disabled>⬇ Export</button>
+          </div>
+          <div class="ai-box" id="ai-ip">Select an attacker IP to run Gemini analysis.</div>
+        </div>
+      </div>
+    </div>
+    <!-- sidebar -->
+    <div class="card" style="height:fit-content">
+      <div class="card-hdr"><span class="card-title">📋 Tracked IPs</span></div>
+      <div id="ip-sidebar" style="max-height:580px;overflow-y:auto;padding:8px 12px">
+        <span style="color:var(--muted);font-size:11px">No sessions yet.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FILES ════════════════════════════════════ -->
+<div class="panel" id="panel-files">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-title">📥 Attacker Downloads</span>
+        <button class="btn" onclick="loadFiles()">↻ Refresh</button>
+      </div>
+      <div id="dl-list" style="max-height:500px;overflow-y:auto;padding:8px 12px">Loading…</div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">📤 Attacker Uploads (CVE Trap)</span></div>
+      <div id="upload-list" style="max-height:500px;overflow-y:auto;padding:8px 12px">Loading…</div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><span class="card-title">🌐 All Unique IPs</span></div>
+      <div id="ip-list" style="max-height:500px;overflow-y:auto;padding:8px 12px">Loading…</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- modal -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title" id="m-ip">—</div>
+      <button class="btn" onclick="document.getElementById('overlay').classList.remove('open')">✕ Close</button>
+    </div>
+    <div id="m-body"></div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8002';
+let feedCount = 0;
+
+/* ── Tab ── */
+function tab(name) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  if(name==='attackers') loadAttackers();
+  if(name==='files') loadFiles();
+}
+
+/* ── Helpers ── */
+function rc(r){return r>=85?'s3':r>=60?'s2':r>=35?'s1':'s0'}
+function flagEmoji(cc){
+  if(!cc||cc.length!==2)return'🌐';
+  return String.fromCodePoint(...[...cc.toUpperCase()].map(c=>0x1F1E6+c.charCodeAt(0)-65));
+}
+function md(t){
+  return t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+           .replace(/^#{1,3} (.+)$/gm,'<strong style="color:var(--cyan)">$1</strong>')
+}
+
+/* ── Overview ── */
+async function loadOverview() {
+  try{
+    const [st, intel] = await Promise.all([
+      fetch(`${API}/api/stats`).then(r=>r.json()).catch(()=>({})),
+      fetch(`${API}/api/intel/summary`).then(r=>r.json()).catch(()=>({})),
+    ]);
+
+    // Unique Visitors = from SQLite (all IPs), not just CVE sessions
+    document.getElementById('s-attackers').textContent = st.unique_visitor_ips ?? st.unique_attackers ?? 0;
+    document.getElementById('s-webshells').textContent  = st.webshell_uploads   ?? 0;
+    document.getElementById('s-revshells').textContent  = st.revshell_attempts  ?? 0;
+    document.getElementById('s-uploads').textContent    = st.total_uploads      ?? 0;
+    document.getElementById('s-commands').textContent   = st.total_commands     ?? 0;
+    document.getElementById('s-endpoints').textContent  = st.total_endpoints    ?? 0;
+    document.getElementById('s-downloads').textContent  = st.total_downloads    ?? 0;
+    document.getElementById('s-beacons').textContent    = st.activated_beacons  ?? 0;
+    document.getElementById('atk-cnt').textContent      = st.unique_visitor_ips ?? 0;
+
+  }catch(e){console.warn('Overview error:',e)}
+}
+
+
+/* ── Attackers tab ── */
+async function loadAttackers() {
+  try{
+    const data = await fetch(`${API}/api/intel/attackers`).then(r=>r.json());
+    const list = data.attackers||[];
+    document.getElementById('atk-hdr').textContent = list.length+' Attackers Tracked';
+    updateIPControls(list);
+
+    if(!list.length){
+      document.getElementById('atk-list').innerHTML =
+        '<span style="color:var(--muted);font-size:11px">No attacker sessions yet.</span>';
+      return;
+    }
+
+    document.getElementById('atk-list').innerHTML = list.map(a=>{
+      const geo=a.geo||{};
+      const flag=flagEmoji(geo.country_code);
+      const vpn=(geo.is_proxy||geo.is_hosting)?'<span style="background:rgba(239,68,68,.15);color:var(--red);padding:1px 7px;border-radius:10px;font-size:8px;margin-left:5px">VPN/HOST</span>':'';
+      return `<div class="a-card" onclick="openAttacker('${a.ip}')">
+        <div style="display:flex;align-items:start;gap:12px">
+          <div style="font-size:26px;line-height:1">${flag}</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="a-ip">${a.ip}</span>
+              <span class="phase-badge phase-${a.current_phase||'IDLE'}">${(a.phase_label||a.current_phase||'IDLE').replace(/^.* /,'')}</span>
+              ${vpn}
+            </div>
+            <div class="a-geo">📍 ${geo.city||'?'}, ${geo.country||'?'} | ${geo.isp||'?'}</div>
+            <div class="a-stats">
+              <span class="ast ${a.webshells_uploaded?'d':'g'}">🐚 ${a.webshells_uploaded||0} webshell</span>
+              <span class="ast ${a.revshell_attempts?'d':'g'}">🔗 ${a.revshell_attempts||0} revshell</span>
+              <span class="ast w">⚡ ${a.commands_run||0} cmds</span>
+              <span class="ast g">⏱ ${a.session_duration_s||0}s</span>
+            </div>
+            <div class="eng-wrap">
+              <div class="eng-bar"><div class="eng-fill" style="width:${a.engagement_score||0}%"></div></div>
+              <span class="eng-val">${a.engagement_score||0}</span>
+            </div>
+          </div>
+          <div style="text-align:right;font-size:9px;color:var(--muted)">
+            <div>Last seen</div>
+            <div style="color:var(--text);font-family:'JetBrains Mono',monospace">${(a.last_seen||'').slice(11,19)}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){console.warn('Attackers error:',e)}
+}
+
+function updateIPControls(attackerList) {
+  // Merge CVE session IPs with all SQLite visitor IPs
+  fetch(`${API}/api/unique_ips`).then(r=>r.json()).catch(()=>({ips:[]})).then(data=>{
+    const cveIPs = new Set(attackerList.map(a=>a.ip));
+    const allIPs = (data.ips||[]);
+    // Build combined selector
+    const sel=document.getElementById('ip-sel');
+    const cur=sel.value;
+    const cveOpts = attackerList.map(a=>`<option value="${a.ip}" ${a.ip===cur?'selected':''}>${a.ip} — ${(a.geo||{}).country||'?'} [CVE session]</option>`).join('');
+    const extraOpts = allIPs.filter(ip=>!cveIPs.has(ip)).map(ip=>`<option value="${ip}" ${ip===cur?'selected':''}>${ip} — [visitor]</option>`).join('');
+    sel.innerHTML = '<option value="">Select attacker IP…</option>' + cveOpts + (extraOpts ? '<optgroup label="— Other Visitors —">' + extraOpts + '</optgroup>' : '');
+
+    // IP sidebar: CVE sessions first (with engagement), then plain visitors
+    const cveHtml = attackerList.map(a=>`<div style="padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer"
+        onclick="document.getElementById('ip-sel').value='${a.ip}';tab('analysis')">
+        <div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--cyan)">${a.ip}</div>
+        <div style="font-size:9px;color:var(--muted)">${(a.geo||{}).country||'?'} · ${a.current_phase||'IDLE'} · score ${a.engagement_score||0}</div>
+      </div>`).join('');
+    const visitorHtml = allIPs.filter(ip=>!cveIPs.has(ip)).map(ip=>`<div style="padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer"
+        onclick="document.getElementById('ip-sel').value='${ip}';tab('analysis')">
+        <div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text)">${ip}</div>
+        <div style="font-size:9px;color:var(--muted)">visitor only</div>
+      </div>`).join('');
+    document.getElementById('ip-sidebar').innerHTML = (cveHtml + visitorHtml) ||
+      '<span style="color:var(--muted);font-size:11px">No sessions yet.</span>';
+  });
+}
+
+/* ── Attacker modal ── */
+async function openAttacker(ip){
+  document.getElementById('m-ip').textContent='⏳ '+ip;
+  document.getElementById('m-body').innerHTML='<div style="color:var(--muted);padding:20px">Loading…</div>';
+  document.getElementById('overlay').classList.add('open');
+  try{
+    const s=await fetch(`${API}/api/intel/attacker/${ip}`).then(r=>r.json());
+    const geo=s.geo||{};
+    const flag=flagEmoji(geo.country_code);
+    document.getElementById('m-ip').textContent=flag+' '+ip;
+
+    // Phase track
+    const phases=['RECON','EXPLOIT','POST_EXPLOIT','LATERAL'];
+    const phaseOrder={IDLE:0,RECON:1,EXPLOIT:2,POST_EXPLOIT:3,LATERAL:4};
+    const curRank=phaseOrder[s.current_phase]||0;
+    const track=`<div class="phase-track">${phases.map(p=>{
+      const rank=phaseOrder[p]||0;
+      return `<div class="ps ${rank<=curRank&&curRank>0?'active-'+p:''}">${p.replace('_','<br>')}</div>`;
+    }).join('')}</div>`;
+
+    // Geo grid
+    const geoGrid=[['Country',geo.country],['City',geo.city],['ISP',geo.isp],
+      ['ASN',geo.asn],['VPN/Proxy',geo.is_proxy?'⚠️ YES':'No'],['Hosting',geo.is_hosting?'⚠️ YES':'No']]
+      .map(([k,v])=>`<div style="background:rgba(255,255,255,.03);border-radius:5px;padding:7px 11px">
+        <div style="font-size:8px;color:var(--muted);text-transform:uppercase;margin-bottom:2px">${k}</div>
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace">${v||'?'}</div>
+      </div>`).join('');
+
+    // Commands
+    const cmds=(s.top_commands||[]).slice(0,10).map(c=>
+      `<div class="cmd-row"><span class="cmd-score ${rc(c.risk)}">${c.risk}</span>
+       <span class="cmd-txt" title="${c.cmd}">${c.cmd}</span>
+       <span class="cmd-lbl">[${c.phase}] ${c.label||''}</span></div>`).join('') ||
+      '<span style="color:var(--muted);font-size:10px">None.</span>';
+
+    // Files
+    const files=(s.uploaded_files||[]).map(f=>{
+      const tc=f.threat_level==='CRITICAL'?'var(--red)':f.threat_level==='HIGH'?'var(--orange)':'var(--gold)';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:10px">
+        <div style="color:${tc};font-family:'JetBrains Mono',monospace">${f.filename} 
+          <span class="phase-badge phase-${f.threat_level==='CRITICAL'?'POST_EXPLOIT':f.threat_level==='HIGH'?'EXPLOIT':'RECON'}">${f.threat_level}</span>
+        </div>
+        <div style="color:var(--muted);margin-top:2px">Patterns: ${(f.patterns||[]).join(', ')||'none'}</div>
+      </div>`;}).join('') || '<span style="color:var(--muted);font-size:10px">None.</span>';
+
+    // Deception
+    const dec=s.deception||{};
+    const decBlock=`<div style="background:rgba(0,243,255,.05);border:1px solid rgba(0,243,255,.15);border-radius:7px;padding:11px;margin-top:14px">
+      <div style="font-size:9px;color:var(--cyan);font-weight:700;margin-bottom:5px">💡 DECEPTION ADVISOR</div>
+      <div style="font-size:11px">${dec.recommendation||'Continue monitoring.'}</div>
+      ${(dec.deception_hints||[]).slice(1).map(h=>`<div style="font-size:10px;color:var(--muted);margin-top:4px">• ${h}</div>`).join('')}
+    </div>`;
+
+    document.getElementById('m-body').innerHTML=`
+      ${track}
+      <div class="g2" style="gap:12px;margin-bottom:12px">
+        <div>
+          <div class="slbl">📍 Geo</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px">${geoGrid}</div>
+          <div class="slbl">📁 Files uploaded</div>
+          ${files}
+        </div>
+        <div>
+          <div class="slbl">⚡ Commands (risk-sorted)</div>
+          <div style="max-height:250px;overflow-y:auto">${cmds}</div>
+        </div>
+      </div>
+      ${decBlock}
+      <div style="margin-top:14px;text-align:right">
+        <button class="btn" onclick="document.getElementById('ip-sel').value='${ip}';document.getElementById('overlay').classList.remove('open');tab('analysis')">🧠 AI Analysis</button>
+      </div>`;
+  }catch(e){
+    document.getElementById('m-body').innerHTML=`<div style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+/* ── AI Analysis ── */
+async function analyzeAll(){
+  const btn=document.getElementById('btn-all');
+  const box=document.getElementById('ai-all');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Running…';
+  box.textContent='Analyzing all sessions…';
+  document.getElementById('btn-dl-all').disabled=true;
+  try{
+    const d=await fetch(`${API}/api/intel/analyze/all`).then(r=>r.json());
+    box.innerHTML=md(d.analysis||'No analysis.');
+    if(d.method==='rule_based') box.innerHTML+='<br><em style="color:var(--muted)">[Rule-based — Gemini not configured]</em>';
+    document.getElementById('btn-dl-all').disabled=false;
+  }catch(e){box.textContent='Error: '+e.message}
+  btn.disabled=false; btn.textContent='↻ Re-Analyze';
+}
+async function analyzeIP(){
+  const ip=document.getElementById('ip-sel').value;
+  const btn=document.getElementById('btn-ip');
+  const box=document.getElementById('ai-ip');
+  if(!ip){box.textContent='Select an IP first.';return}
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Running…';
+  document.getElementById('btn-dl-ip').disabled=true;
+  box.textContent='Analyzing '+ip+'…';
+  try{
+    const d=await fetch(`${API}/api/intel/analyze/${ip}`).then(r=>r.json());
+    box.innerHTML=md(d.analysis||'No analysis.');
+    if(d.method==='rule_based') box.innerHTML+='<br><em style="color:var(--muted)">[Rule-based — Gemini not configured]</em>';
+    document.getElementById('btn-dl-ip').disabled=false;
+  }catch(e){box.textContent='Error: '+e.message}
+  btn.disabled=false; btn.textContent='↻ Re-Analyze';
+}
+
+function downloadAnalysis(boxId, filename) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const text = box.innerText || box.textContent;
+  const blob = new Blob([text], {type: 'text/markdown'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ── Live feed ── */
+function addFeedItem(e) {
+  const feed = document.getElementById('overview-feed');
+  if (!feed) return;
+  const wait = feed.querySelector('[style*="Waiting"]');
+  if (wait) wait.remove();
+  const item = document.createElement('div');
+  item.className = `feed-item ${(e.level||'').toLowerCase()} ${e.type||''}`;
+  item.innerHTML = `<div class="feed-ts">${e.timestamp||new Date().toLocaleTimeString()} ${e.client_ip?'— '+e.client_ip:''}</div>
+    <div class="feed-msg">${e.message||'Event'}</div>`;
+  feed.insertBefore(item, feed.firstChild);
+  feedCount++;
+  document.getElementById('feed-cnt').textContent = feedCount + ' events';
+  while (feed.children.length > 200) feed.removeChild(feed.lastChild);
+}
+function clearFeed() {
+  document.getElementById('overview-feed').innerHTML = '<div class="feed-item" style="color:var(--muted)">Feed cleared.</div>';
+  feedCount = 0;
+  document.getElementById('feed-cnt').textContent = '0 events';
+}
+
+/* ── Files ── */
+async function loadFiles(){
+  try{
+    const [dl, ips, intel] = await Promise.all([
+      fetch(`${API}/api/downloads`).then(r=>r.json()),
+      fetch(`${API}/api/unique_ips`).then(r=>r.json()),
+      fetch(`${API}/api/intel/attackers`).then(r=>r.json()).catch(()=>({attackers:[]})),
+    ]);
+
+    // Attacker Downloads (files they downloaded FROM the honeypot)
+    const dlList = dl.downloads||[];
+    document.getElementById('dl-list').innerHTML = dlList.length===0
+      ? '<span style="color:var(--muted);font-size:11px">No downloads yet.</span>'
+      : dlList.map(d=>`<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:10px">
+          <div style="font-family:'JetBrains Mono',monospace;color:${d.is_sensitive?'var(--red)':'var(--text)'}">
+            ${d.is_sensitive?'🔴 ':'📄 '}${d.filename}</div>
+          <div style="color:var(--muted);margin-top:2px">IP: ${d.client_ip} · ${(d.timestamp||'').slice(0,19)}</div>
+          <div style="color:var(--muted);font-size:9px;margin-top:1px">${d.user_agent?d.user_agent.slice(0,80):''}</div>
+        </div>`).join('');
+
+    // Attacker Uploads (files they uploaded TO the CVE trap)
+    const atkList = intel.attackers||[];
+    const allUploads = atkList.flatMap(a=>(a.uploaded_files||[]).map(f=>({...f, ip:a.ip})));
+    document.getElementById('upload-list').innerHTML = allUploads.length===0
+      ? '<span style="color:var(--muted);font-size:11px">No uploads recorded yet (requires CVE trap interaction).</span>'
+      : allUploads.map(f=>{
+          const tc = f.threat_level==='CRITICAL'?'var(--red)':f.threat_level==='HIGH'?'var(--orange)':'var(--gold)';
+          return `<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:10px">
+            <div style="font-family:'JetBrains Mono',monospace;color:${tc}">☠️ ${f.filename}</div>
+            <div style="color:var(--muted);margin-top:2px">IP: ${f.ip} · threat: ${f.threat_level||'?'}</div>
+            <div style="color:var(--muted);font-size:9px;margin-top:1px">Patterns: ${(f.patterns||[]).join(', ')||'none'}</div>
+          </div>`;
+        }).join('');
+
+    // All Unique IPs
+    const ipList = ips.ips||[];
+    const ipEl=document.getElementById('ip-list');
+    if(ipEl) ipEl.innerHTML = ipList.length===0
+      ? '<span style="color:var(--muted);font-size:11px">No IPs recorded yet.</span>'
+      : ipList.map(ip=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:10px">
+          <span style="font-family:'JetBrains Mono',monospace;color:var(--cyan)">${ip}</span>
+          <button style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;font-size:9px;cursor:pointer" onclick="document.getElementById('ip-sel').value='${ip}';tab('analysis')">Analyze</button>
+        </div>`).join('');
+  }catch(e){console.warn('Files error:',e)}
+}
+
+
+/* ── Poll loop ── */
+async function pollNew() {
+  try{
+    const entries = await fetch(`${API}/api/new`).then(r=>r.json());
+    for (const e of (entries||[])) addFeedItem(e);
+    document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
+  }catch(e){}
+}
+
+/* ── Init ── */
+async function init(){
+  try{
+    const entries = await fetch(`${API}/api/new`).then(r=>r.json());
+    if (entries && entries.length) {
+      document.getElementById('overview-feed').innerHTML = '';
+      entries.slice(-60).reverse().forEach(e=>addFeedItem(e));
+    }
+  }catch(e){}
+  loadOverview();
+  loadAttackers();
+  loadFiles();
+}
+
+init();
+setInterval(async()=>{ await pollNew(); loadOverview(); },5000);
+setInterval(loadAttackers,20000);
+</script>
+</body>
+</html>
