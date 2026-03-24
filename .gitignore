@@ -43,3 +43,8 @@ secrets/
 
 # Dependencies
 libs/
+
+# User exclusions (from chat)
+.github/
+.obsidian/
+.gitignore
