@@ -20,17 +20,24 @@ class LLMGenerator:
             api_key: Google API key (or set GOOGLE_API_KEY env var)
             model: Model to use (gemini-pro, gemini-1.5-pro, etc.)
         """
-        try:
-            from dotenv import load_dotenv
-            env_path = Path(__file__).parent.parent.parent.resolve() / ".env"
-            template_path = Path(__file__).parent.parent.parent.resolve() / ".env.template"
-            
-            if env_path.exists():
-                load_dotenv(env_path)
-            elif template_path.exists():
-                load_dotenv(template_path)
-        except ImportError:
-            pass
+        # Manually load from .env or .env.template to guarantee we get the API key
+        env_path = Path(__file__).parent.parent.parent.resolve() / ".env"
+        template_path = Path(__file__).parent.parent.parent.resolve() / ".env.template"
+        
+        for path_to_check in [env_path, template_path]:
+            if path_to_check.exists():
+                try:
+                    with open(path_to_check, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith("#") and "=" in line:
+                                key, val = line.split("=", 1)
+                                key, val = key.strip(), val.strip()
+                                if key not in os.environ:
+                                    os.environ[key] = val
+                except Exception:
+                    pass
+                break  # Stop checking after the first file is processed
 
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
