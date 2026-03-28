@@ -11,7 +11,9 @@
 | Add a new fixed API route | `honeypot.py` |
 | Change upload trap endpoints / logic | `src/file_upload_rce.py` |
 | Change webshell payload patterns detected | `src/file_upload_rce.py` → `_WEBSHELL_PATTERNS` |
-| Change webshell command responses | `src/rag/shell_rag_loader.py` |
+| Change AI shell responses (ls, cat, etc.) | `src/rag/shell_rag_loader.py` → `_llm()` prompt |
+| Change static ground-truth command responses | `src/rag/shell_rag_loader.py` → `_get_fallback_ground_truth()` |
+| Change the fake server identity (hostname, IP, pwd) | `src/rag/shell_rag_loader.py` → `_DEFAULT_IDENTITY` |
 | Change attacker phase classification | `src/attacker_intel.py` → `_CMD_RISK_TABLE` |
 | Change per-IP engagement scoring | `src/attacker_intel.py` → `AttackerSession._update_engagement()` |
 | Change IP geolocation provider | `src/attacker_intel.py` → `_geolocate()` |
@@ -24,12 +26,13 @@
 | Change PDF / Excel bait content | `src/file_generator/generator.py` |
 | Change XML / CSV / JSON / JS bait content | `src/file_generator/multi_format_gen.py` |
 | Change SQLite bait database content | `src/file_generator/sqlite_gen.py` |
-| Change the Gemini API prompts | `src/llm/llm_integration.py` |
+| Change the Gemini API prompts (banking paths) | `src/llm/llm_integration.py` |
 | Add new banking RAG context | `src/rag/` files |
 | Add a new DB table / query method | `src/state/state_manager.py` |
+| Change log encoding or handlers | `honeypot.py` → `EncodedFileHandler` / `SQLiteLogHandler` |
 | Change dashboard UI look | `dashboard/index.html` |
 | Add dashboard API endpoint | `dashboard/monitor.py` |
-| Change Docker build steps | `docker/Dockerfile` |
+| Change Docker build steps or Gunicorn workers | `docker/Dockerfile` |
 | Change environment variables | `.env.template` |
 | Change Windows startup behaviour | `run_honeypot.bat` |
 
@@ -39,14 +42,14 @@
 
 | File | What it does |
 |------|-------------|
-| `honeypot.py` | **Main application.** All HTTP routes. CVE shim routes registered first, dynamic catch-all at bottom. ~950 lines. |
-| `requirements.txt` | Python packages. Run `pip install -r requirements.txt` after pulling. |
+| `honeypot.py` | **Main application.** All HTTP routes + log handlers. CVE shim routes registered first, dynamic catch-all at bottom. ~1050 lines. Gunicorn-compatible WSGI entry point. |
+| `requirements.txt` | Python packages. Run `pip install -r requirements.txt`. |
 | `run_honeypot.bat` | Windows launcher. Starts honeypot (8001) + dashboard (8002). |
 | `setup_honeypot.py` | Creates `databases/`, `generated_files/`, `log_files/` on first run. |
 | `DEPLOYMENT.md` | Docker and VPS deployment guide. |
 | `ATTACK_GUIDE.md` | Red-team testing guide — how to trigger every trap. |
 | `.env.template` | Template for environment variables. Copy to `.env`. |
-| `.env` | Your secrets (`GEMINI_API_KEY`). Gitignored. |
+| `.env` | Your secrets (`GEMINI_API_KEY`, `LLM_MODEL`). Gitignored. |
 
 ---
 
@@ -67,7 +70,7 @@ Implements the fake file upload vulnerability trap simulating CVE-2020-36179 (Ja
 | `/api/v2/documents/compliance-upload` | POST | Spring upload handler |
 | `/clientportal/support/attachments.php` | GET | PHP bank client portal upload form |
 | `/clientportal/support/attachments.php` | POST | PHP upload handler |
-| `/uploads/<filename>` | GET | Webshell execution trap (only registered filenames work) |
+| `/uploads/<filename>` | GET | Webshell execution trap (only `_shell_registry` filenames accepted) |
 | `/api/dashboard/cve/file-upload` | GET | Full attacker intel summary |
 | `/api/dashboard/cve/file-upload/attackers` | GET | All attacker profiles |
 | `/api/dashboard/cve/file-upload/attacker/<ip>` | GET | Per-IP deep profile |
@@ -77,62 +80,54 @@ Implements the fake file upload vulnerability trap simulating CVE-2020-36179 (Ja
 | Function | What it does |
 |----------|-------------|
 | `_route_spring_upload_get()` | Returns Spring compliance portal HTML form with Apache-Coyote headers |
-| `_route_php_upload_get()` | Returns PHP bank client portal HTML form with PHP/Apache headers |
-| `_handle_upload()` | Shared handler — reads ≤512 bytes, detects webshell patterns, registers filename in `_shell_registry` |
+| `_route_php_upload_get()` | Returns PHP bank client portal HTML form with Apache/PHP headers |
+| `_handle_upload()` | Reads ≤512 bytes, runs 13-pattern webshell check, runs 18-tag file analysis, registers in `_shell_registry` |
 | `_contains_webshell_code()` | 13-pattern regex check (`<?php`, `system(`, `eval(`, `passthru(`, `$_GET[`, etc.) |
-| `_analyze_file()` | 18-pattern full analysis → threat level (LOW/MEDIUM/HIGH/CRITICAL), extension risk, payload tags |
-| `_route_webshell_get()` | Webshell execution trap — only filenames in `_shell_registry` accepted |
-| `_get_shell_output()` | Delegates to `shell_rag_loader.resolve_shell_command()` |
+| `_analyze_file()` | 18-pattern analysis → threat level (LOW/MEDIUM/HIGH/CRITICAL), extension risk, payload tags |
+| `_route_webshell_get()` | Webshell execution trap — delegates to `shell_rag_loader.resolve_shell_command()` |
 | `register_file_upload_routes(app)` | Registers all routes + inits RAG loader |
 
-**Deceptive headers applied:**
+**Deceptive headers:**
 
-| Endpoint type | Server header | X-Powered-By |
-|--------------|---------------|-------------|
+| Portal | Server | X-Powered-By |
+|--------|--------|-------------|
 | Spring | `Apache-Coyote/1.1` | `Spring Framework 5.3.9` |
 | PHP | `Apache/2.4.54 (Debian)` | `PHP/7.4.33` |
 
-**Dangerous extensions triggering CRITICAL alert:**
-`.php`, `.php3`, `.php4`, `.php5`, `.phtml`, `.phar`, `.jsp`, `.jspx`, `.aspx`, `.asp`, `.cfm`, `.py`, `.rb`, `.pl`, `.sh`, `.bash`, `.cgi`
-
-**Webshell payload patterns detected:**
-`<?php`, `system(`, `exec(`, `shell_exec(`, `passthru(`, `eval(`, `base64_decode(`, `$_GET[`, `$_POST[`, `$_REQUEST[`, `popen(`, `proc_open(`, `cmd=`
+**Dangerous extensions:** `.php`, `.php3`–`.php5`, `.phtml`, `.phar`, `.jsp`, `.jspx`, `.aspx`, `.asp`, `.cfm`, `.py`, `.rb`, `.pl`, `.sh`, `.bash`, `.cgi`
 
 ---
 
 ### `src/attacker_intel.py` — Intelligence Engine ⭐
 
-Per-IP attacker profiling. All data is in-memory (fast; no DB write on every hit).
-Feeds the dashboard via `dashboard_summary()`.
+Per-IP attacker profiling. Fully in-memory (no DB write on every event — fast).
 
 **Key components:**
 
 | Component | What it does |
 |-----------|-------------|
 | `AttackerSession` | Full per-IP profile: timeline, commands, files, phase, engagement score (0–100) |
-| `_CMD_RISK_TABLE` | 25+ command patterns → (risk 0–100, attack phase, label) |
-| `_FILE_PATTERNS` | 18 regex patterns → payload type tags (PHP_OPENER, TCP_REVSHELL, JAVA_RCE, etc.) |
-| `_DANGEROUS_EXT` | 17 dangerous extensions detected on upload |
-| `_classify_command(cmd)` | Returns risk score + phase label for any shell command |
-| `_analyze_file(bytes, filename)` | Returns extension risk, payload tags, threat level, has_revshell, has_eval |
-| `_geolocate(ip)` | Free IP geolocation (ip-api.com) with in-memory cache; skips private IPs |
-| `_deception_strategy(session)` | Returns up to 3 deception hints based on current phase and what attacker has done |
-| `dashboard_summary()` | Full intelligence summary for the dashboard API |
+| `_CMD_RISK_TABLE` | 25+ shell command patterns → (risk 0–100, attack phase, label) |
+| `_FILE_PATTERNS` | 18 byte-regex patterns → payload tags (`PHP_OPENER`, `TCP_REVSHELL`, `JAVA_RCE`, etc.) |
+| `_DANGEROUS_EXT` | 17 extension strings triggering CRITICAL alert on upload |
+| `_classify_command(cmd)` | Returns risk score + phase + label for any shell command |
+| `_analyze_file(bytes, filename)` | Returns threat level, extension risk, payload tags, has_revshell, has_eval |
+| `_geolocate(ip)` | Free IP lookup (ip-api.com), skips private IPs, in-memory cache |
+| `_deception_strategy(session)` | Returns up to 3 phase-specific deception hints |
+| `dashboard_summary()` | Full aggregated intelligence for the dashboard API |
 
-**Attack phases:**
+**Attack phases and engagement scoring:**
 
 | Phase | Risk range | Engagement delta | Typical commands |
 |-------|-----------|-----------------|-----------------|
 | `IDLE` | — | +1 | Just connected |
-| `RECON` | 15–35 | +risk/5 | `whoami`, `id`, `ls`, `ps aux`, `ifconfig`, `env`, `history` |
-| `EXPLOIT` | 45–80 | +risk/5 | `sudo -l`, `cat /etc/shadow`, `wget http://...`, `useradd`, `chmod 4755` |
+| `RECON` | 15–35 | +risk/5 | `whoami`, `id`, `ls`, `ps aux`, `ifconfig`, `env` |
+| `EXPLOIT` | 45–80 | +risk/5 | `sudo -l`, `cat /etc/shadow`, `wget`, `useradd` |
 | `POST_EXPLOIT` | 85–95 | +risk/5 | `bash -i >& /dev/tcp/`, `nc -e /bin/bash`, `msfvenom` |
 | `LATERAL` | 65–80 | +risk/5 | `ssh user@host`, `crontab -e`, `scp`, `rsync` |
 
-**Engagement score deltas:**
-
-| Event type | Score delta |
-|-----------|------------|
+| Event type | Engagement delta |
+|-----------|----------------|
 | `FORM_VIEW` | +2 |
 | `UPLOAD_SAFE` | +5 |
 | `UPLOAD_SHELL` | +25 |
@@ -148,37 +143,57 @@ intel.record_form_view(ip, endpoint)
 intel.record_upload(ip, filename, raw_bytes, endpoint)
 intel.record_command(ip, cmd, output)
 intel.record_webshell_access(ip, filename, cmd, output)
-intel.get_session(ip)          # → full per-IP dict
-intel.get_all_sessions()       # → list[dict]
-intel.dashboard_summary()      # → global dashboard dict
+intel.get_session(ip)        # → full per-IP dict
+intel.get_all_sessions()     # → list[dict]
+intel.dashboard_summary()    # → global dashboard dict
 ```
 
 ---
 
 ### `src/rag/shell_rag_loader.py` — Hybrid Shell Engine ⭐
 
-Resolves shell commands with a **6-step resolution pipeline** (never fails — always returns a string):
+Resolves shell commands with a **6-step pipeline**, always returning a string.
+
+**Important**: In the current implementation, **Gemini LLM is called first** (step 1 — primary engine), with cache and TF-IDF as offline fallbacks. This means every `ls`, `cat`, `find`, or novel command gets a **fresh, realistic, dynamically generated response**.
+
+**Key behaviors powered by Gemini:**
+- **`ls <any directory>`**: Gemini generates a full directory listing with real timestamps, inodes, www-data ownership, and context-appropriate filenames
+- **`cat <php file>`**: Gemini generates realistic PHP banking application source code with embedded DB credentials
+- **`cat <config file>`**: Gemini generates plausible Apache/PHP config, `.env` files, cronjobs
+- **Any unknown command**: Gemini generates authentic-looking output as a compromised Ubuntu 22.04 server
+
+**Fake server identity** (embedded in all Gemini prompts):
+
+| Field | Value |
+|-------|-------|
+| Hostname | `bankcorpweb-02.internal` |
+| IP | `10.0.1.52` |
+| User | `www-data` (uid=33) |
+| CWD | `/var/www/html/clientportal/support` |
+| DB host | `db-primary-1.internal` |
+| DB name | `bankcorp_prod` |
+
+**Resolution pipeline:**
 
 ```
-1. Exact cache match        (58 ground-truth commands, always correct)
-2. Case-insensitive match   (same 58 commands, any case)
-3. Dynamic handler          (echo, cat <path>, grep, ls <path>, revshell → 1.5s hang + EOF)
-4. TF-IDF fuzzy match       (235 real Cowrie attacker sessions, threshold 0.40)
-5. Gemini LLM               (live generation, cached per session via ai_cmd_cache.json)
-6. Fallback                 ("bash: <cmd>: command not found")
+1. Gemini LLM     — Primary (always called if enabled; generates dynamic unique output)
+2. Exact cache    — 58 ground-truth commands (Gemini-bootstrapped at startup)
+3. Case-insensitive exact match
+4. Dynamic handler — echo, cd, touch, mkdir, chmod (silent), revshell (1.5–3s delay + random error)
+5. TF-IDF fuzzy   — Cowrie 235-session dataset (threshold ≥ 0.85)
+6. Fallback       — "bash: <cmd>: command not found"
 ```
+
+**Startup bootstrapping:**
+On init, if Gemini is enabled, it pre-generates all 58 ground-truth responses in a single batch API call, producing server-specific output (hostname, IP, CWD, DB creds) before any attacker connects.
 
 **Key functions:**
 
 | Function | What it does |
 |----------|-------------|
-| `init(pkl_path, json_path, api_key)` | Loads dataset, builds TF-IDF index, initialises Gemini client. Idempotent. |
-| `resolve_shell_command(cmd)` | Runs the full 6-step pipeline — always returns a string |
+| `init(pkl_path, json_path, api_key)` | Load data, build TF-IDF, configure Gemini, bootstrap ground-truth. Idempotent. |
+| `resolve_shell_command(cmd)` | Full 6-step pipeline — always returns a string |
 | `get_metadata()` | Returns loader status: cache size, TF-IDF enabled, LLM enabled |
-
-**Data files:**
-- `src/rag/shell_rag.pkl` — Cowrie-trained command→response model
-- `src/rag/ai_cmd_cache.json` — Gemini-pre-generated responses (bootstrapped on startup)
 
 ---
 
@@ -186,70 +201,114 @@ Resolves shell commands with a **6-step resolution pipeline** (never fails — a
 
 | File | What it does | Edit when... |
 |------|-------------|-------------|
-| `maze_generator.py` | Validates paths, assigns access levels (public/user/admin), generates breadcrumb hints | Adding access levels, changing valid endpoint patterns |
+| `maze_generator.py` | Validates paths, assigns access levels (public/user/admin), generates breadcrumb hints. API structure defined inline (no external JSON file). | Adding access levels, changing valid endpoint patterns |
 | `http_responses.py` | Returns 401 / 403 / 404 / 500 JSON templates with realistic banking error messages | Changing error response appearance |
 
 ---
 
-### `src/data_generator/banking_data.py` — Fake Banking Data ⭐
+### `src/data_generator/banking_data.py` — Dynamic Banking Data ⭐
 
-Generates fresh, randomized data on **every request** — no two attacker calls get the same numbers.
-Uses `Faker` for realistic names and `random` for numeric variance.
+Generates fresh, randomized data on **every request** using `Faker` + `random`.
+If Gemini is enabled (`banking_data.llm = llm`), it can also generate AI-enriched content.
 
 | Method | Returns | Count per call |
 |--------|---------|---------------|
-| `generate_companies()` | List of company dicts (name, id, balance, status) | 8–20 |
-| `generate_accounts()` | List of account dicts (IBAN, type, balance, currency) | 15–40 |
-| `generate_transactions()` | List of transaction dicts (amount, from/to, timestamp) | 20–100 |
-| `generate_payments()` | List of payment dicts (reference, status, method) | 10–35 |
-| `generate_users()` | List of admin user dicts (name, role, last_login) | 5–15 |
-| `generate_secrets()` | List of fake secret entries (API keys, tokens, creds) | 10 |
-| `generate_merchants()` | List of merchant dicts (name, MCC, terminal count) | varies |
-| `generate_terminals()` | List of POS terminal dicts (serial, location, status) | varies |
+| `generate_companies()` | Company dicts (name, id, balance, status, sector) | 8–20 |
+| `generate_accounts()` | Account dicts (IBAN, type, balance, currency, status) | 15–40 |
+| `generate_transactions()` | Transaction dicts (amount, from/to, timestamp, status) | 20–100 |
+| `generate_payments()` | Payment dicts (reference, method, status, merchant) | 10–35 |
+| `generate_users()` | Admin user dicts (name, role, last_login, permissions) | 5–15 |
+| `generate_secrets()` | Fake secrets (API keys, tokens, credentials) | 10 |
+| `generate_merchants()` | Merchant dicts (name, MCC, terminal count) | varies |
+| `generate_terminals()` | POS terminal dicts (serial, location, status) | varies |
 
 ---
 
-### `src/file_generator/` — Bait Files
+### `src/file_generator/` — Bait Files with Beacons
 
-Creates tracked files served to attackers. Every file gets a unique **beacon ID** embedded.
-When the attacker opens the file, the beacon calls back to the honeypot.
+Every file gets a unique **beacon ID** embedded. When the attacker opens it, the beacon calls back.
 
 | File | Formats | Beacon method |
 |------|---------|--------------|
 | `generator.py` | PDF, Excel (.xlsx) | URL in PDF footer / hyperlink in Excel cell |
-| `multi_format_gen.py` | XML, CSV, JSON, JavaScript | `<beacon>` tag / URL column / `_beacon_url` field / `fetch()` call |
-| `sqlite_gen.py` | .db / .sqlite | Row inserted in `_tracking` table |
-| `txt_gen.py` | .txt credentials | URL at bottom of file |
+| `multi_format_gen.py` | XML, CSV, JSON, JavaScript | `<beacon>` tag / URL column / `_beacon_url` / `fetch()` |
+| `sqlite_gen.py` | .db / .sqlite | Row in `_tracking` table |
+| `txt_gen.py` | .txt credentials | URL at bottom |
 
 ---
 
-### `src/llm/llm_integration.py` — API Response AI
+### `src/llm/llm_integration.py` — Banking API AI
 
-Calls Gemini to generate realistic JSON responses for unknown API paths.
-Result is saved to SQLite `endpoints` table — same URL always returns the same AI response.
+Calls Gemini to generate realistic JSON for unknown API paths. Result saved to SQLite `endpoints` table.
 
-**Prompt logic**: Includes path context, HTTP method, inferred resource type, and banking domain context from `rag_loader.py`.
+**Methods:**
+
+| Method | What it does |
+|--------|-------------|
+| `generate_api_response(path, method, context, rag_context)` | Primary: generates realistic banking JSON for any unknown path |
+| `generate_endpoint_description(path, method)` | Generates Swagger/OpenAPI documentation for a path |
+| `generate_file_content(file_type)` | Generates bait file content (PDF/Excel/env formats) |
+| `generate_structured_data(prompt, format)` | Generic helper: returns JSON, CSV, XML, SQL, JS — strips markdown |
+
+**Model**: Configured via `LLM_MODEL` env var (default: `gemini-2.5-flash`).
+Auto-loads API key from `.env` or `.env.template`.
 
 ---
 
-### `src/state/state_manager.py` — Persistence
+### `src/state/state_manager.py` — SQLite Persistence
 
-**SQLite tables in `databases/honeypot.db` (WAL mode):**
+All honeypot state in a single `databases/honeypot.db` (WAL mode).
+Migrated from TinyDB; thread-safe via `threading.local()` connections per thread.
 
-| Table | Stores |
-|-------|--------|
-| `endpoints` | AI-generated responses per `(path, method)` |
-| `objects` | Typed fake objects reused across sessions |
-| `beacons` | Bait file tokens — tracks download + open events |
-| `downloads` | Every `/download/*` hit with IP, user agent, timestamp |
-| `logs` | Structured audit log (level, event, IP, message, Base64-encoded) |
+**SQLite tables:**
 
-**Key methods:**
-- `log_event(level, event, ip, message)` — writes to all three log handlers
-- `log_download(ip, ua, filename, beacon_id)` — records file download
-- `get_downloads()` — returns all download records for dashboard
-- `get_endpoint(path, method)` / `save_endpoint(...)` — AI response cache
-- `get_or_create_beacon(token)` / `fire_beacon(token, ip)` — beacon tracking
+| Table | Stores | Key methods |
+|-------|--------|------------|
+| `endpoints` | AI-generated responses per `(path, method)` — unique constraint | `save_endpoint()`, `get_endpoint()`, `endpoint_exists()` |
+| `objects` | Typed fake objects reused across sessions | `save_object()`, `get_objects_by_type()` |
+| `beacons` | Bait file tokens — download + open tracking | `save_beacon()`, `activate_beacon()` |
+| `downloads` | Every `/download/*` hit (IP, UA, is_sensitive flag) | `log_download()`, `get_downloads()`, `get_sensitive_downloads()` |
+| `logs` | Structured audit log (level, event, IP, message) | `log_entry()`, `get_logs()` |
+
+**Maintenance**: `_cleanup_old_records(90)` runs at startup and deletes records > 90 days old.
+
+---
+
+## 🔒 Log Architecture — Dual-Write System
+
+Every event is written to **two places simultaneously** in `honeypot.py`:
+
+```python
+# 1. EncodedFileHandler → log_files/api_audit.log
+#    Base64-encodes every line before writing — resists casual tampering
+encoded_msg = base64.b64encode(msg.encode('utf-8')).decode('utf-8')
+
+# 2. SQLiteLogHandler → databases/honeypot.db → logs table
+#    Plain-text structured entry — fully queryable by level/event/IP
+state.log_entry(level, message, event, client_ip)
+```
+
+**Decoding a log line:**
+```python
+import base64
+# Read a line from log_files/api_audit.log
+decoded = base64.b64decode(line.strip()).decode('utf-8')
+```
+
+---
+
+## 🐳 Production Deployment — Docker + Gunicorn
+
+| Component | Detail |
+|-----------|--------|
+| **Dockerfile** | Multi-stage: `builder` compiles C extensions, `base` is 90MB runtime image |
+| **Non-root user** | All processes run as `honeypot` uid=1001 — never root |
+| **Gunicorn** | 4 workers × 2 threads (honeypot); 2 workers (dashboard); 120s LLM timeout |
+| **Health checks** | Both services: `curl -sf http://localhost:{port}/` every 30s |
+| **Named volumes** | `honeypot-logs`, `honeypot-db`, `honeypot-files` — persist across restarts |
+| **Dashboard isolation** | Mounts volumes as `:ro` (read-only) — can't modify honeypot state |
+| **Auto-restart** | `restart: unless-stopped` on both services |
+| **Network** | `maze-net` bridge network — services isolated from host |
 
 ---
 
@@ -258,7 +317,7 @@ Result is saved to SQLite `endpoints` table — same URL always returns the same
 | File | What it does |
 |------|-------------|
 | `index.html` | Full dashboard UI — polls backend every few seconds |
-| `monitor.py` | Flask backend on port 8002 |
+| `monitor.py` | Flask backend on port 8002; Gunicorn-compatible |
 
 **Standard Dashboard API (port 8002):**
 
@@ -271,13 +330,13 @@ Result is saved to SQLite `endpoints` table — same URL always returns the same
 | `GET /api/downloads` | All file download records |
 | `GET /api/sensitive` | Sensitive file downloads only |
 
-**CVE Intelligence API (port 8001 — served by honeypot itself):**
+**CVE Intelligence API (port 8001 — served by honeypot):**
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /api/dashboard/cve/file-upload` | Global intelligence summary (all IPs, phase dist, top commands) |
-| `GET /api/dashboard/cve/file-upload/attackers` | All attacker profiles, sorted by engagement score |
-| `GET /api/dashboard/cve/file-upload/attacker/<ip>` | Per-IP deep profile (geo, timeline, files, commands, deception hints) |
+| `GET /api/dashboard/cve/file-upload` | Global summary (all IPs, phase dist, top commands) |
+| `GET /api/dashboard/cve/file-upload/attackers` | All attacker profiles, sorted by engagement |
+| `GET /api/dashboard/cve/file-upload/attacker/<ip>` | Per-IP deep profile (geo, timeline, files, deception hints) |
 
 ---
 
@@ -285,7 +344,7 @@ Result is saved to SQLite `endpoints` table — same URL always returns the same
 
 | Directory | Contents |
 |-----------|---------|
-| `databases/` | `honeypot.db` — all SQLite state (WAL mode) |
+| `databases/` | `honeypot.db` — SQLite WAL mode, 5 tables, 90-day retention |
 | `generated_files/` | Bait files served to attackers |
-| `log_files/` | `api_audit.log` — Base64-encoded audit log |
-| `Dataset/` | `shell_rag.pkl` + `ai_cmd_cache.json` training data |
+| `log_files/` | `api_audit.log` — Base64-encoded structured audit log |
+| `Dataset/` | `shell_rag.pkl` + `ai_cmd_cache.json` — Cowrie training data |
