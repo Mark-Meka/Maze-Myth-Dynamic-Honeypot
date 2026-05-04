@@ -250,7 +250,7 @@ Calls Gemini to generate realistic JSON for unknown API paths. Result saved to S
 | `generate_file_content(file_type)` | Generates bait file content (PDF/Excel/env formats) |
 | `generate_structured_data(prompt, format)` | Generic helper: returns JSON, CSV, XML, SQL, JS — strips markdown |
 
-**Model**: Configured via `LLM_MODEL` env var (default: `gemini-2.5-flash`).
+**Model**: Configured via `LLM_MODEL` env var (default: `gemma-3-27b-it`).
 Auto-loads API key from `.env` or `.env.template`.
 
 ---

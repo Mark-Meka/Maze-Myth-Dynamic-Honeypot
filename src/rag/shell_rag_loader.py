@@ -375,7 +375,7 @@ def init(pkl_path=None, json_path=None, api_key=None):
         try:
             import google.generativeai as genai
             genai.configure(api_key=api_key)
-            target_model = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+            target_model = os.getenv("LLM_MODEL", "gemma-3-27b-it")
             _gemini_model = genai.GenerativeModel(target_model)
             _log.info("[ShellRAG] Gemini AI generation enabled using model %s", target_model)
         except Exception as e:

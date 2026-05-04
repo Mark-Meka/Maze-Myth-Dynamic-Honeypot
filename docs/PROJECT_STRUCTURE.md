@@ -105,7 +105,7 @@ Maze-Myth-Dynamic-Honeypot/
 │   │                                 generate_file_content()     — PDF/Excel/env bait content
 │   │                                 generate_structured_data() — JSON/CSV/XML/SQL/JS helper
 │   │                                 Auto-loads API key from .env or .env.template
-│   │                                 Model: LLM_MODEL env var (default: gemini-2.5-flash)
+│   │                                 Model: LLM_MODEL env var (default: gemma-3-27b-it)
 │   │
 │   ├── rag/
 │   │   ├── rag_loader.py          ← Banking domain RAG context for API response prompts
@@ -306,7 +306,7 @@ All tables use integer primary keys, indexed by IP and timestamp. WAL mode + `PR
 # .env  (copy from .env.template)
 GEMINI_API_KEY=AIzaSy...your-key-here...
 HONEYPOT_URL=http://localhost:8001
-LLM_MODEL=gemini-2.5-flash
+LLM_MODEL=gemma-3-27b-it
 ```
 
 ---

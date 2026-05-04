@@ -434,7 +434,7 @@ python dashboard/monitor.py  # Terminal 2 — Dashboard (port 8002)
 # .env  (copy from .env.template)
 GEMINI_API_KEY=AIzaSy...your-key-here...
 HONEYPOT_URL=http://localhost:8001
-LLM_MODEL=gemini-2.5-flash
+LLM_MODEL=gemma-3-27b-it
 ```
 
 ---

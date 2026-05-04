@@ -133,7 +133,7 @@ def _get_gemini():
         if not key:
             return None
         genai.configure(api_key=key)
-        _gemini = genai.GenerativeModel(os.getenv("LLM_MODEL", "gemini-2.5-flash"))
+        _gemini = genai.GenerativeModel(os.getenv("LLM_MODEL", "gemma-3-27b-it"))
         return _gemini
     except Exception as e:
         log.warning("[Gemini] unavailable: %s", e)
