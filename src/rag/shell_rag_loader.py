@@ -324,7 +324,7 @@ def _build_ground_truth(S: dict) -> dict[str, str]:
         f"Rules:\n"
         f"- Respect www-data permissions (uid=33, no sudo, no /root access).\n"
         f"- Return realistic responses like 'Permission denied', 'command not found', or full directory listings and tool paths as appropriate.\n"
-        f"- Output MUST be pure JSON. No markdown wrappings.\n\n"
+        f"- Output MUST be valid JSON. All backslashes must be properly escaped (e.g. \\\\n, \\\\l).\n\n"
         f"Commands: {json.dumps(commands)}"
     )
     
@@ -338,7 +338,12 @@ def _build_ground_truth(S: dict) -> dict[str, str]:
         if text.endswith("```"):
             text = text[:-3]
             
-        data = json.loads(text.strip())
+        text = text.strip()
+        # Fix invalid JSON escapes (e.g., \l, \x, \\e) which LLMs often generate
+        parts = text.split(r'\\')
+        text = r'\\'.join([re.sub(r'\\(?![/\\bfnrtu"])', r'\\\\', p) for p in parts])
+        # strict=False allows unescaped control characters like literal newlines
+        data = json.loads(text, strict=False)
         
         # Merge back in case AI hallucinated missing keys
         result = dict(fallback)
@@ -348,6 +353,11 @@ def _build_ground_truth(S: dict) -> dict[str, str]:
         _log.info("[ShellRAG] Dynamic AI ground-truth successfully loaded.")
         return result
     except Exception as e:
+        try:
+            with open("failed_json.txt", "w", encoding="utf-8") as f:
+                f.write(text if 'text' in locals() else "text variable not bound")
+        except Exception:
+            pass
         _log.warning("[ShellRAG] Dynamic AI bootloader failed: %s — falling back to static strings", e)
         return fallback
 
@@ -375,7 +385,9 @@ def init(pkl_path=None, json_path=None, api_key=None):
         try:
             import google.generativeai as genai
             genai.configure(api_key=api_key)
-            target_model = os.getenv("LLM_MODEL", "gemma-3-27b-it")
+            target_model = os.getenv("LLM_MODEL")
+            if not target_model:
+                raise Exception("LLM_MODEL not found in .env")
             _gemini_model = genai.GenerativeModel(target_model)
             _log.info("[ShellRAG] Gemini AI generation enabled using model %s", target_model)
         except Exception as e:

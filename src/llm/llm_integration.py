@@ -43,7 +43,9 @@ class LLMGenerator:
         if not self.api_key:
             raise Exception("Google API key not found. Set GEMINI_API_KEY in .env")
         
-        target_model = model or os.getenv("LLM_MODEL", "gemma-3-27b-it")
+        target_model = model or os.getenv("LLM_MODEL")
+        if not target_model:
+            raise Exception("LLM_MODEL not found. Set LLM_MODEL in .env")
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(target_model)
         self.logger = logging.getLogger(__name__)
