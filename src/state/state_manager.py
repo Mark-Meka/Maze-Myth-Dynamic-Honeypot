@@ -145,6 +145,38 @@ class APIStateManager:
             CREATE INDEX IF NOT EXISTS idx_downloads_ts
                 ON downloads(timestamp);
 
+            -- Attacker session history for IP reputation and redirect tracking
+            CREATE TABLE IF NOT EXISTS attacker_sessions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip          TEXT    NOT NULL,
+                first_seen  TEXT    NOT NULL,
+                last_seen   TEXT    NOT NULL,
+                risk_score  INTEGER DEFAULT 0,
+                redirected  INTEGER DEFAULT 0,
+                country     TEXT    DEFAULT '',
+                isp         TEXT    DEFAULT '',
+                is_vpn      INTEGER DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_ip ON attacker_sessions(ip);
+
+            CREATE TABLE IF NOT EXISTS events (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id   INTEGER,
+                timestamp    TEXT    NOT NULL,
+                method       TEXT    DEFAULT '',
+                uri          TEXT    DEFAULT '',
+                status_code  INTEGER DEFAULT 0,
+                user_agent   TEXT    DEFAULT '',
+                headers      TEXT    DEFAULT '',
+                body         TEXT    DEFAULT '',
+                cookies      TEXT    DEFAULT '',
+                risk_delta   INTEGER DEFAULT 0,
+                risk_reasons TEXT    DEFAULT '',
+                event_type   TEXT    DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
+            CREATE INDEX IF NOT EXISTS idx_events_ts ON events(timestamp);
+
             -- Structured audit log (mirrors log_files/api_audit.log in searchable form)
             -- level: INFO / WARNING / CRITICAL / ERROR
             -- event: short machine-readable tag (NEW_ENDPOINT_DISCOVERY, FILE_DOWNLOAD, etc.)
@@ -357,6 +389,86 @@ class APIStateManager:
         conn = self._conn()
         rows = conn.execute(
             "SELECT * FROM downloads ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert_session(self, ip: str, risk_score: int = 0,
+                       redirected: int = 0, country: str = "",
+                       isp: str = "", is_vpn: int = 0):
+        """Insert or replace an attacker session record based on IP."""
+        conn = self._conn()
+        try:
+            existing_id = conn.execute(
+                "SELECT id FROM attacker_sessions WHERE ip=? LIMIT 1",
+                (ip,)
+            ).fetchone()
+            conn.execute(
+                "INSERT OR REPLACE INTO attacker_sessions "
+                "(id, ip, first_seen, last_seen, risk_score, redirected, country, isp, is_vpn) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    existing_id["id"] if existing_id else None,
+                    ip,
+                    _now(),
+                    _now(),
+                    risk_score,
+                    redirected,
+                    country,
+                    isp,
+                    is_vpn,
+                )
+            )
+            conn.commit()
+        except sqlite3.Error as e:
+            logger.error(f"[STATE] upsert_session failed: {e}")
+
+    def log_event(self, session_id: int, method: str, uri: str,
+                  status_code: int, user_agent: str,
+                  headers: str, body: str, cookies: str,
+                  risk_delta: int, risk_reasons: str,
+                  event_type: str):
+        """Record an event associated with an attacker session."""
+        conn = self._conn()
+        try:
+            conn.execute(
+                "INSERT INTO events "
+                "(session_id, timestamp, method, uri, status_code, user_agent, "
+                "headers, body, cookies, risk_delta, risk_reasons, event_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    _now(),
+                    method,
+                    uri,
+                    status_code,
+                    user_agent,
+                    headers,
+                    body,
+                    cookies,
+                    risk_delta,
+                    risk_reasons,
+                    event_type,
+                )
+            )
+            conn.commit()
+        except sqlite3.Error as e:
+            logger.error(f"[STATE] log_event failed: {e}")
+
+    def get_session_by_ip(self, ip: str) -> dict | None:
+        """Return a single attacker session record by IP."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM attacker_sessions WHERE ip=? LIMIT 1",
+            (ip,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_sessions(self, limit: int = 100) -> list[dict]:
+        """Return attacker session records ordered by most recent."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM attacker_sessions ORDER BY last_seen DESC LIMIT ?",
             (limit,)
         ).fetchall()
         return [dict(r) for r in rows]

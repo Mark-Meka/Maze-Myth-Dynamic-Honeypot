@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BankCorp — User Search</title>
+  <style>
+    :root {
+      --bg0:#0a0e1a; --bg1:#0f172a; --bg2:#1e293b;
+      --border:rgba(148,163,184,.14); --accent:#3b82f6;
+      --accent2:#0ea5e9; --danger:#ef4444; --warn:#f59e0b;
+      --ok:#22c55e; --text:#e2e8f0; --muted:#94a3b8;
+      font-family:'Segoe UI',Inter,system-ui,sans-serif;
+      color-scheme:dark;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg0);color:var(--text);min-height:100vh;}
+
+    .topbar{
+      background:linear-gradient(90deg,#0a1628,#0d1f3c);
+      border-bottom:1px solid var(--border);
+      padding:14px 32px;
+      display:flex;align-items:center;gap:16px;
+    }
+    .logo{font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:10px;}
+    .sep{flex:1;}
+    .badge{
+      background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.28);
+      color:#fca5a5;padding:4px 12px;border-radius:99px;
+      font-size:.78rem;font-weight:600;letter-spacing:.05em;
+    }
+
+    .page{max-width:1000px;margin:0 auto;padding:36px 24px;}
+    .breadcrumb{font-size:.84rem;color:var(--muted);margin-bottom:26px;}
+    .breadcrumb a{color:var(--accent2);text-decoration:none;}
+    .breadcrumb a:hover{text-decoration:underline;}
+
+    h1{font-size:1.45rem;margin-bottom:6px;}
+    .subtitle{color:var(--muted);font-size:.9rem;margin-bottom:28px;line-height:1.6;}
+
+    /* search bar */
+    .search-bar{
+      display:flex;gap:12px;margin-bottom:28px;
+    }
+    .search-bar input{
+      flex:1;padding:13px 18px;background:var(--bg2);
+      border:1px solid var(--border);border-radius:14px;
+      color:var(--text);font-size:.95rem;outline:none;
+      transition:border-color .2s;
+    }
+    .search-bar input:focus{border-color:var(--accent);}
+    .search-bar button{
+      padding:13px 24px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff;border:none;border-radius:14px;font-weight:700;
+      font-size:.95rem;cursor:pointer;transition:filter .2s,transform .2s;
+    }
+    .search-bar button:hover{filter:brightness(1.1);transform:translateY(-1px);}
+
+    /* debug panel */
+    .debug-box{
+      background:rgba(15,23,42,.95);border:1px solid rgba(245,158,11,.25);
+      border-radius:12px;padding:14px 18px;font-family:monospace;
+      font-size:.82rem;color:#fde68a;margin-bottom:24px;line-height:1.8;
+    }
+    .debug-box strong{color:#fb923c;}
+
+    /* results panel */
+    .panel{
+      background:var(--bg1);border:1px solid var(--border);
+      border-radius:20px;overflow:hidden;margin-bottom:22px;
+    }
+    .panel-hdr{
+      background:rgba(30,41,59,.8);border-bottom:1px solid var(--border);
+      padding:16px 22px;display:flex;align-items:center;
+      justify-content:space-between;font-size:.95rem;font-weight:600;
+    }
+    .count{
+      background:rgba(59,130,246,.14);border:1px solid rgba(59,130,246,.22);
+      color:#93c5fd;padding:4px 12px;border-radius:99px;font-size:.8rem;
+    }
+
+    table{width:100%;border-collapse:collapse;}
+    th{
+      text-align:left;padding:10px 16px;font-size:.78rem;font-weight:600;
+      color:var(--muted);text-transform:uppercase;letter-spacing:.06em;
+      border-bottom:1px solid var(--border);
+    }
+    td{padding:13px 16px;font-size:.88rem;border-bottom:1px solid rgba(148,163,184,.06);}
+    tr:last-child td{border-bottom:none;}
+    tr:hover td{background:rgba(59,130,246,.04);}
+
+    .role-admin{color:#f472b6;font-weight:600;}
+    .role-dba  {color:#fb923c;font-weight:600;}
+    .role-audit{color:#6ee7b7;}
+    .role-def  {color:var(--muted);}
+
+    .pill{
+      display:inline-block;padding:3px 10px;border-radius:99px;font-size:.78rem;
+    }
+    .pill-ok {background:rgba(34,197,94,.1);color:#86efac;border:1px solid rgba(34,197,94,.2);}
+    .pill-no {background:rgba(239,68,68,.1);color:#fca5a5;border:1px solid rgba(239,68,68,.2);}
+
+    .hash{
+      font-family:monospace;font-size:.78rem;color:#64748b;
+      max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    }
+
+    a.link{color:var(--accent2);text-decoration:none;font-size:.82rem;}
+    a.link:hover{text-decoration:underline;}
+
+    .alert-inject{
+      background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);
+      border-left:4px solid var(--warn);border-radius:12px;
+      padding:14px 18px;font-size:.86rem;color:#fde68a;
+      margin-bottom:22px;line-height:1.7;
+    }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">🔍 BankCorp Internal User Directory</div>
+  <div class="sep"></div>
+  <span class="badge">INTERNAL</span>
+</div>
+
+<div class="page">
+  <div class="breadcrumb">
+    <a href="/dashboard">Dashboard</a> /
+    <a href="/api/v2/admin">Admin Panel</a> /
+    User Search
+  </div>
+
+  <h1>👤 Internal User Directory Search</h1>
+  <p class="subtitle">
+    Query the BankCorp employee and system-account directory.
+    Results include role, department, last login, and MFA status.<br>
+    <strong style="color:#f59e0b">⚠ DEBUG MODE ACTIVE</strong> — raw SQL queries are shown below each result.
+  </p>
+
+  <form id="searchForm" method="GET" action="/api/users/search">
+    <div class="search-bar">
+      <input type="text" id="q" name="q"
+             placeholder="Search by username, email, role, or department…"
+             value="{{ q | default('') }}"
+             autocomplete="off">
+      <button type="submit">🔎 Search</button>
+    </div>
+  </form>
+
+  {% if debug %}
+  <div class="debug-box">
+    <strong>SQL Query:</strong> {{ debug.sql }}<br>
+    <strong>Note:</strong> {{ debug.note }}
+  </div>
+  {% endif %}
+
+  {% if error %}
+  <div class="alert-inject">⚠️ Database error: <code>{{ error }}</code><br>
+  Hint: Input may be unsanitised — try <code>' OR '1'='1</code>.</div>
+  {% endif %}
+
+  {% if results %}
+  <div class="panel">
+    <div class="panel-hdr">
+      <span>Search results for <strong>"{{ q }}"</strong></span>
+      <span class="count">{{ results | length }} user(s) found</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>User ID</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Department</th>
+          <th>MFA</th>
+          <th>Last Login</th>
+          {% if show_hash %}<th>Password Hash</th>{% endif %}
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in results %}
+        <tr>
+          <td><code style="color:#64748b;font-size:.82rem;">{{ u.user_id }}</code></td>
+          <td><strong>{{ u.username }}</strong></td>
+          <td style="color:var(--muted)">{{ u.email }}</td>
+          <td>
+            <span class="
+              {% if u.role == 'admin' or u.role == 'DBA' %}role-admin
+              {% elif u.role == 'auditor' %}role-audit
+              {% else %}role-def{% endif %}">
+              {{ u.role }}
+            </span>
+          </td>
+          <td style="color:var(--muted)">{{ u.get('department', '—') }}</td>
+          <td>
+            {% if u.mfa_enabled %}
+              <span class="pill pill-ok">✓ Enabled</span>
+            {% else %}
+              <span class="pill pill-no">✗ Disabled</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--muted);font-size:.83rem;">{{ u.last_login[:16] if u.last_login else '—' }}</td>
+          {% if show_hash %}
+          <td><div class="hash" title="{{ u.get('password_hash','') }}">{{ u.get('password_hash','—') }}</div></td>
+          {% endif %}
+          <td>
+            <a class="link" href="/api/accounts/{{ u.user_id }}">Accounts</a> ·
+            <a class="link" href="/api/v2/admin/users">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <p style="font-size:.82rem;color:var(--muted);margin-top:16px;">
+    Related:
+    <a href="/api/v2/admin" style="color:var(--accent2)">Admin Panel</a> ·
+    <a href="/api/v2/admin/secrets" style="color:var(--accent2)">Secrets Vault</a> ·
+    <a href="/api/files/view?path=." style="color:var(--accent2)">File Browser</a>
+  </p>
+</div>
+
+<script>
+  // Auto-submit on Enter
+  document.getElementById('q').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('searchForm').submit();
+  });
+</script>
+</body>
+</html>

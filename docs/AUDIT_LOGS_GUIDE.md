@@ -2,12 +2,12 @@
 
 Maze Myth writes every event to **two places in parallel**:
 
-| Where | Format | Good for |
-|-------|--------|---------|
-| `log_files/api_audit.log` | Base64-encoded text lines | Tamper-evident archiving |
-| `databases/honeypot.db` → `logs` table | Plain SQL rows | Instant querying and filtering |
-| `attacker_intel` (in-memory) | Per-IP session objects | Real-time behavioral analysis |
-
+| Where                                  | Format                    | Good for                       |
+| -------------------------------------- | ------------------------- | ------------------------------ |
+| `log_files/api_audit.log`              | Base64-encoded text lines | Tamper-evident archiving       |
+| `databases/honeypot.db` → `logs` table | Plain SQL rows            | Instant querying and filtering |
+| `attacker_intel` (in-memory)           | Per-IP session objects    | Real-time behavioral analysis  |
+> Note: In Docker Compose, attacker-facing traffic enters through the `proxy` service on port `80`. The `honeypot` service runs internally on `10.0.0.3:8001`; the dashboard is exposed on port `8002` and reads shared logs/SQLite state from named volumes.
 ---
 
 ## Log Levels
@@ -55,13 +55,13 @@ Real-time attacker profiling — no SQL needed.
 
 ```bash
 # Full intelligence dashboard
-curl http://localhost:8001/api/dashboard/cve/file-upload | python3 -m json.tool
+curl http://localhost:8002/api/intel/summary | python3 -m json.tool
 
 # All attacker profiles
-curl http://localhost:8001/api/dashboard/cve/file-upload/attackers | python3 -m json.tool
+curl http://localhost:8002/api/intel/attackers | python3 -m json.tool
 
 # Deep profile for one attacker IP
-curl http://localhost:8001/api/dashboard/cve/file-upload/attacker/10.0.0.1 | python3 -m json.tool
+curl http://localhost:8002/api/intel/attacker/10.0.0.1 | python3 -m json.tool
 ```
 
 **What the deep profile returns:**
@@ -212,77 +212,9 @@ with open("log_files/api_audit.log", "r") as f:
 ```
 
 **PowerShell:**
+
 ```powershell
 Get-Content log_files\api_audit.log | ForEach-Object {
     [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
 } | Select-String "CVE_"
 ```
-
-**Bash:**
-```bash
-while IFS= read -r line; do
-    echo "$line" | base64 -d
-    echo
-done < log_files/api_audit.log | grep "CVE_"
-```
-
----
-
-## Reading All Database Tables
-
-```bash
-sqlite3 databases/honeypot.db
-
-.tables          # endpoints, objects, beacons, downloads, logs
-.schema logs
-.headers on
-.mode column
-```
-
-```python
-import sqlite3, json
-
-conn = sqlite3.connect("databases/honeypot.db")
-conn.row_factory = sqlite3.Row
-
-# AI-generated endpoints (access count = how many times attacker hit same URL)
-for ep in conn.execute("SELECT path, method, access_count FROM endpoints ORDER BY access_count DESC").fetchall():
-    print(f"{ep['method']:6} {ep['path']} — {ep['access_count']} hits")
-
-# All downloads
-for d in conn.execute("SELECT filename, client_ip, timestamp FROM downloads ORDER BY timestamp DESC").fetchall():
-    print(f"{d['timestamp']}  {d['client_ip']}  {d['filename']}")
-
-# Active beacons (opened by attacker)
-for b in conn.execute(
-    "SELECT beacon_id, file_name, client_ip, accessed_at, activation_ip FROM beacons WHERE accessed_at IS NOT NULL"
-).fetchall():
-    print(f"BEACON {b['beacon_id'][:8]}  file={b['file_name']}  opened_from={b['activation_ip']}")
-
-conn.close()
-```
-
----
-
-## High-Value CRITICAL Triggers
-
-### API Maze
-
-| Access | Endpoint |
-|--------|---------|
-| Admin secrets | `/api/v2/admin/secrets` |
-| API credentials | `/companies/*/apiCredentials` |
-| Internal config | `/internal/config/*` |
-| Database config | `/internal/config/database` |
-| Backups | `/internal/backups` |
-
-### CVE Upload Trap
-
-| Action | Severity |
-|--------|---------|
-| View upload form | INFO |
-| Upload safe file | MEDIUM |
-| Upload file with dangerous extension only | CRITICAL |
-| Upload file with webshell code | CRITICAL |
-| Execute any `?cmd=` | CRITICAL |
-| Attempt reverse shell | CRITICAL |

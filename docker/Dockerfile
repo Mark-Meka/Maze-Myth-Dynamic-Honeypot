@@ -13,21 +13,15 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Build dependencies only needed to compile certain Python packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libffi-dev \
-    libssl-dev \
-    libjpeg-dev \
-    zlib1g-dev \
- && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install into /install so we can COPY them into runtime stage
+# All packages in requirements.txt ship pre-built manylinux wheels for
+# Python 3.11 on linux/amd64 — no C compiler or dev headers are required.
+# --only-binary=:all: ensures pip never falls back to source compilation
+# and keeps the builder stage network-light and fast.
 COPY requirements.txt .
 RUN pip install --upgrade pip \
- && pip install gunicorn \
- && pip install --prefix=/install --no-cache-dir -r requirements.txt \
- && pip install --prefix=/install gunicorn
+ && pip install --prefix=/usr/local --no-cache-dir --only-binary=:all: \
+        -r requirements.txt \
+ && pip install --prefix=/usr/local --no-cache-dir gunicorn
 
 
 # ── Stage 2: Runtime base (shared by both targets) ───────
@@ -37,19 +31,17 @@ FROM python:3.11-slim AS base
 RUN groupadd --gid 1001 honeypot \
  && useradd  --uid 1001 --gid honeypot --no-create-home honeypot
 
-# Only the runtime shared libraries — no build tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libffi8 \
-    libssl3 \
-    libjpeg62-turbo \
-    zlib1g \
-    curl \
+# curl is only needed for the HEALTHCHECK command.
+# All Python package C extensions come from manylinux wheels which
+# bundle their own shared libraries — no external dev libs required.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy compiled Python packages from builder
-COPY --from=builder /install /usr/local
+COPY --from=builder /usr/local /usr/local
 
 # Copy application source (the .dockerignore excludes venv, logs, secrets)
 COPY --chown=honeypot:honeypot . .

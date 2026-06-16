@@ -1,0 +1,138 @@
+*   Role: Compromised Linux web server (Ubuntu 22.04, Apache2 + PHP).
+    *   User: `www-data` (uid=33, gid=33).
+    *   Hostname: `bankcorpweb-02.internal`.
+    *   IP: `10.0.1.52`.
+    *   CWD: `/var/www/html/clientportal/support`.
+    *   DB Host: `db-primary-1.internal`, DB: `bankcorp_prod`.
+    *   Constraint: No sudo, no /root access, realistic permissions.
+    *   Output Format: Valid JSON object (keys = commands, values = terminal output).
+
+    *   `whoami`: `www-data`
+    *   `id`: `uid=33(www-data) gid=33(www-data) groups=33(www-data)`
+    *   `hostname`: `bankcorpweb-02.internal`
+    *   `uname -a`: `Linux bankcorpweb-02.internal 5.15.0-88-generic #98-Ubuntu SMP Wed Jan 17 13:30:00 UTC 2023 x86_64 x86_64 GNU/Linux`
+    *   `uname`: `Linux`
+    *   `pwd`: `/var/www/html/clientportal/support`
+    *   `echo $HOME`: `/var/www`
+    *   `echo $USER`: `www-data`
+    *   `echo $SHELL`: `/bin/bash` (or `/bin/sh` - usually bash for these simulations)
+    *   `echo $PATH`: `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+    *   `ls`: `index.php contact.php ticket_submit.php assets/`
+    *   `ls -la`: Detailed listing of `/var/www/html/clientportal/support`.
+    *   `ls -lh`: Human readable detailed listing.
+    *   `cat /etc/passwd`: Standard passwd content (truncated for brevity but realistic).
+    *   `cat /etc/hosts`: `127.0.0.1 localhost\n10.0.1.52 bankcorpweb-02.internal bankcorpweb-02`
+    *   `cat /etc/shadow`: `cat: /etc/shadow: Permission denied`
+    *   `cat /etc/issue`: `Ubuntu 22.04.3 LTS \\s\n \n \\l`
+    *   `cat /etc/os-release`: Standard Ubuntu 22.04 os-release.
+    *   `ifconfig`: `command not found` (net-tools often not installed by default in minimal Ubuntu 22.04, `ip a` is preferred).
+    *   `ip a`: Show `eth0` with `10.0.1.52`.
+    *   `netstat -tulpn`: `cat: /proc/net/tcp: Permission denied` (or just the output if run as user, but `-p` requires root for other processes. So, just the port list without PIDs). Actually, `netstat` is often not installed. Let's assume `ss` is there.
+    *   `ss -tulpn`: Similar to netstat, `-p` requires root for other processes. Only shows current process.
+    *   `ps aux`: List of processes. Apache (`apache2`) will be prominent.
+    *   `ps -ef`: List of processes.
+    *   `top`: (This is an interactive command, usually returns a snapshot in shell output contexts or a "top" header). I will provide a snapshot.
+    *   `env`: Environment variables.
+    *   `sudo -l`: `www-data is not in the sudoers file. This incident will be reported.`
+    *   `groups`: `www-data : www-data`
+    *   `id -a`: `uid=33(www-data) gid=33(www-data) groups=33(www-data)`
+    *   `cat /proc/version`: `Linux version 5.15.0-88-generic ...`
+    *   `cat /proc/cpuinfo`: Standard CPU info (x86_64).
+    *   `cat /proc/meminfo`: Standard memory info.
+    *   `which nc`: `/bin/nc`
+    *   `which ncat`: (Not installed usually)
+    *   `which netcat`: `/bin/nc`
+    *   `which python`: (Not installed usually)
+    *   `which python3`: `/usr/bin/python3`
+    *   `which perl`: `/usr/bin/perl`
+    *   `which ruby`: (Not installed usually)
+    *   `which bash`: `/usr/bin/bash`
+    *   `which sh`: `/bin/sh`
+    *   `which curl`: `/usr/bin/curl`
+    *   `which wget`: `/usr/bin/wget`
+    *   `python3 --version`: `Python 3.10.12`
+    *   `python --version`: `command not found: python`
+    *   `perl --version`: `This is perl 5, version 34...`
+    *   `date`: `Tue Oct 24 14:32:11 UTC 2023`
+    *   `uptime`: ` 14:32:11 up 45 days,  2:11,  1 user,  load average: 0.05, 0.03, 0.01`
+    *   `history`: (Usually empty for a web shell/non-interactive shell)
+    *   `echo "hello world"`: `hello world`
+    *   `cat /nonexistent/file.txt`: `cat: /nonexistent/file.txt: No such file or directory`
+    *   `ls /root`: `ls: cannot open directory '/root': Permission denied`
+    *   `cd /invalidpath`: `cd: /invalidpath: No such file or directory`
+    *   `cat /etc/passwd123`: `cat: /etc/passwd123: No such file or directory`
+    *   `ls -zzz`: `ls: invalid option -- 'z'`
+    *   `wget`: (Shows help text)
+    *   `curl`: (Shows help text)
+    *   `exit`: (Nothing, process ends)
+
+    *   Escape newlines as `\n`.
+    *   Escape quotes if necessary.
+    *   Ensure JSON syntax is perfect.
+
+    *   `www-data` cannot read `/etc/shadow`.
+    *   `www-data` cannot list `/root`.
+    *   `www-data` cannot run `sudo`.
+    *   `ip a` shows the assigned IP.
+    *   `ps aux` shows the Apache processes running as root and www-data.
+```json
+{
+  "whoami": "www-data",
+  "id": "uid=33(www-data) gid=33(www-data) groups=33(www-data)",
+  "hostname": "bankcorpweb-02.internal",
+  "uname -a": "Linux bankcorpweb-02.internal 5.15.0-88-generic #98-Ubuntu SMP Wed Jan 17 13:30:00 UTC 2023 x86_64 x86_64 GNU/Linux",
+  "uname": "Linux",
+  "pwd": "/var/www/html/clientportal/support",
+  "echo $HOME": "/var/www",
+  "echo $USER": "www-data",
+  "echo $SHELL": "/bin/bash",
+  "echo $PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+  "ls": "assets  contact.php  index.php  ticket_submit.php",
+  "ls -la": "total 16\ndrwxr-xr-x 2 root root 4096 Oct 12 09:15 .\ndrwxr-xr-x 4 root root 4096 Oct 12 09:10 ..\ndrwxr-xr-x 2 www-data www-data 4096 Oct 12 09:20 assets\n-rw-r--r-- 1 www-data www-data 1240 Oct 12 09:22 contact.php\n-rw-r--r-- 1 www-data www-data 2560 Oct 12 09:22 index.php\n-rw-r--r-- 1 www-data www-data 3120 Oct 12 09:22 ticket_submit.php",
+  "ls -lh": "total 16K\ndrwxr-xr-x 2 root root 4.1K Oct 12 09:15 .\ndrwxr-xr-x 4 root root 4.1K Oct 12 09:10 ..\ndrwxr-xr-x 2 www-data www-data 4.1K Oct 12 09:20 assets\n-rw-r--r-- 1 www-data www-data 1.2K Oct 12 09:22 contact.php\n-rw-r--r-- 1 www-data www-data 2.5K Oct 12 09:22 index.php\n-rw-r--r-- 1 www-data www-data 3.1K Oct 12 09:22 ticket_submit.php",
+  "cat /etc/passwd": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\nbin:x:2:2:bin:/bin:/usr/sbin/nologin\nsys:x:3:3:sys:/dev:/usr/sbin/nologin\nsync:x:4:65534:sync:/bin:/bin/sync\ngames:x:5:60:games:/usr/games:/usr/sbin/nologin\nman:x:6:12:man:/var/cache/man:/usr/sbin/nologin\nlp:x:7:7:lp:/var/spool/lpd:/usr/sbin/nologin\nmail:x:8:8:mail:/var/mail:/usr/sbin/nologin\nnews:x:9:9:news:/var/spool/news:/usr/sbin/nologin\nuucp:x:10:10:uucp:/var/spool/uucp:/usr/sbin/nologin\nproxy:x:13:13:proxy:/bin:/usr/sbin/nologin\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin\nbackup:x:34:34:backup:/var/backups:/usr/sbin/nologin\nlist:x:38:38:Mailing List Manager:/var/list:/usr/sbin/nologin\nirc:x:39:39:ircd:/var/run/ircd:/usr/sbin/nologin\ngnats:x:41:41:Gnats Daemon:/var/lib/gnats:/usr/sbin/nologin\nnobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin",
+  "cat /etc/hosts": "127.0.0.1 localhost\n127.0.1.1 bankcorpweb-02\n10.0.1.52 bankcorpweb-02.internal bankcorpweb-02\n10.0.1.10 db-primary-1.internal db-primary-1",
+  "cat /etc/shadow": "cat: /etc/shadow: Permission denied",
+  "cat /etc/issue": "Ubuntu 22.04.3 LTS \\s\n \\n \\l",
+  "cat /etc/os-release": "PRETTY_NAME=\"Ubuntu 22.04.3 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"22.04\"\nVERSION=\"22.04.3 LTS (Jammy Jellyfish)\"\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.ubuntu.com/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=jammy",
+  "ifconfig": "bash: ifconfig: command not found",
+  "ip a": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000\n    link/ether 02:42:ac:11:00:52 brd ff:ff:ff:ff:ff:ff\n    inet 10.0.1.52/24 brd 10.0.1.255 scope global eth0\n       valid_lft forever preferred_lft forever",
+  "netstat -tulpn": "bash: netstat: command not found",
+  "ss -tulpn": "Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\ntcp   LISTEN 0      128    0.0.0.0:80          0.0.0.0:*    users:((\"apache2\",pid=1120,fd=4))\ntcp   LISTEN 0      128    0.0.0.0:443         0.0.0.0:*    users:((\"apache2\",pid=1120,fd=5))",
+  "ps aux": "USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\nroot         1  0.0  0.1 168652 12124 ?        Ss   Oct12   0:02 /sbin/init\nroot        10  0.0  0.0  15424  4120 ?        S    Oct12   0:00 /lib/systemd/systemd-journald\nroot       1120  0.0  1.2 256412 45120 ?        Ssl  Oct12   0:15 /usr/sbin/apache2 -k start\nwww-data   1121  0.0  0.4 256412 12040 ?        Ssl  Oct12   0:01 /usr/sbin/apache2 -k start\nwww-data   1122  0.0  0.4 256412 12040 ?        Ssl  Oct12   0:01 /usr/sbin/apache2 -k start\nwww-data   1123  0.0  0.4 256412 12040 ?        Ssl  Oct12   0:01 /usr/sbin/apache2 -k start",
+  "ps -ef": "UID        PID  PPID  C STIME TTY          TIME CMD\nroot         1     0  0 Oct12 ?        00:00:02 /sbin/init\nroot       1120     1  0 Oct12 ?        00:00:15 /usr/sbin/apache2 -k start\nwww-data   1121  1120  0 Oct12 ?        00:00:01 /usr/sbin/apache2 -k start\nwww-data   1122  1120  0 Oct12 ?        00:00:01 /usr/sbin/apache2 -k start\nwww-data   1123  1120  0 Oct12 ?        00:00:01 /usr/sbin/apache2 -k start",
+  "top": "top - 14:32:11 up 45 days,  2:11,  1 user,  load average: 0.05, 0.03, 0.01\nTasks: 112 total,   1 running, 111 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.3 us,  0.5 sy,  0.0 ni, 99.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :   3945.2 total,   2112.4 free,   841.1 used,   891.7 buff/cache\nMiB Swap:   2048.0 total,   2048.0 free,     0.0 used.   3012.1 avail Mem\n\n  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM TIME+ COMMAND\n 1120 root      20   0 256412 45120 15120 Ssl  0.0  1.2 0:15 apache2\n 1121 www-data  20   0 256412 12040 15120 Ssl  0.0  0.4 0:01 apache2",
+  "env": "PWD=/var/www/html/clientportal/support\nUSER=www-data\nHOME=/var/www\nLANG=C.UTF-8\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nSHELL=/bin/bash",
+  "sudo -l": "www-data is not in the sudoers file. This incident will be reported.",
+  "groups": "www-data : www-data",
+  "id -a": "uid=33(www-data) gid=33(www-data) groups=33(www-data)",
+  "cat /proc/version": "Linux version 5.15.0-88-generic (#98-Ubuntu SMP Wed Jan 17 13:30:00 UTC 2023) x86_64",
+  "cat /proc/cpuinfo": "processor\t: 0\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t: 158\nmodel name\t: Intel(R) Xeon(R) CPU E3-1200 v5/v6\nstepping\t: 9\nmicrocode\t: 0xca\ncpu MHz\t: 3400.000\ncache size\t: 8192 KB\nphysical id\t: 0\n",
+  "cat /proc/meminfo": "MemTotal:       4043520 kB\nMemFree:        2159364 kB\nMemAvailable:   2932112 kB\nBuffers:         123456 kB\nCached:          768128 kB\nSwapTotal:       2097148 kB\nSwapFree:       2097148 kB",
+  "which nc": "/bin/nc",
+  "which ncat": "",
+  "which netcat": "/bin/nc",
+  "which python": "",
+  "which python3": "/usr/bin/python3",
+  "which perl": "/usr/bin/perl",
+  "which ruby": "",
+  "which bash": "/usr/bin/bash",
+  "which sh": "/bin/sh",
+  "which curl": "/usr/bin/curl",
+  "which wget": "/usr/bin/wget",
+  "python3 --version": "Python 3.10.12",
+  "python --version": "bash: python: command not found",
+  "perl --version": "This is perl 5, version 34, subversion 0 (v5.34.0) built for x86_64-linux-gnu",
+  "date": "Tue Oct 24 14:32:11 UTC 2023",
+  "uptime": " 14:32:11 up 45 days,  2:11,  1 user,  load average: 0.05, 0.03, 0.01",
+  "history": "",
+  "echo \"hello world\"": "hello world",
+  "cat /nonexistent/file.txt": "cat: /nonexistent/file.txt: No such file or directory",
+  "ls /root": "ls: cannot open directory '/root': Permission denied",
+  "cd /invalidpath": "bash: cd: /invalidpath: No such file or directory",
+  "cat /etc/passwd123": "cat: /etc/passwd123: No such file or directory",
+  "ls -zzz": "ls: invalid option -- 'z'\nTry 'ls --help' for more information.",
+  "wget": "wget (GNU Wget) 1.21.2\nUsage: wget [options] {URL[s]}\n...",
+  "curl": "curl (curl 7.81.0)\nUsage: curl [option...] [URL]\n...",
+  "exit": ""
+}

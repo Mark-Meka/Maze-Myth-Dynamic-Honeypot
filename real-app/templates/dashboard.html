@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BankCorp Dashboard</title>
+    <style>
+        :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #020617 0%, #0f172a 48%, #111827 100%);
+            color: #e2e8f0;
+            padding: 24px;
+        }
+        .page {
+            width: min(1100px, 100%);
+            margin: 0 auto;
+        }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 22px;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+        .brand span { font-size: 1.6rem; }
+        .status {
+            padding: 10px 14px;
+            border-radius: 14px;
+            background: rgba(59, 130, 246, .14);
+            color: #bfdbfe;
+            border: 1px solid rgba(59, 130, 246, .2);
+            font-size: .95rem;
+        }
+        .panel {
+            border: 1px solid rgba(148, 163, 184, .18);
+            border-radius: 24px;
+            background: rgba(15, 23, 42, .9);
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .22);
+        }
+        .grid {
+            display: grid;
+            gap: 18px;
+        }
+        .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .card {
+            padding: 20px;
+            border-radius: 20px;
+            background: rgba(15, 23, 42, .85);
+            border: 1px solid rgba(148, 163, 184, .12);
+        }
+        .card h2 {
+            margin: 0 0 10px;
+            font-size: 1.05rem;
+        }
+        .card p,
+        .card li,
+        .card dd { color: #cbd5e1; line-height: 1.6; }
+        .primary {
+            color: #93c5fd;
+        }
+        ul { list-style: none; margin: 0; padding: 0; }
+        li { margin: 10px 0; }
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+        .section-title {
+            margin: 0 0 18px;
+            font-size: 1.4rem;
+            letter-spacing: .01em;
+        }
+        .small-link {
+            display: inline-flex;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, .05);
+            color: #93c5fd;
+            text-decoration: none;
+            border: 1px solid rgba(147, 197, 253, .15);
+            transition: background .2s ease;
+        }
+        .small-link:hover { background: rgba(59, 130, 246, .13); }
+        .pill { display: inline-flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 999px; background: rgba(56, 189, 248, .14); color: #bae6fd; font-size: .95rem; border: 1px solid rgba(56, 189, 248, .22); }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="topbar">
+            <div class="brand"><span>🏦</span>BankCorp Customer Portal</div>
+            <div class="status">Live demo API access | Customer view</div>
+        </div>
+
+        <div class="panel">
+            <div class="section-title">Welcome, {{ profile.name }}</div>
+            <div class="grid grid-3">
+                <div class="card">
+                    <h2>Layer 1 — Profile API</h2>
+                    <p>Customer identity and profile details are served by the user profile API layer.</p>
+                    <p><span class="primary">GET /api/user</span><br><span class="primary">GET /api/user/profile</span></p>
+                </div>
+                <div class="card">
+                    <h2>Layer 2 — Accounts API</h2>
+                    <p>Account summaries and balances are provided by the accounts service layer.</p>
+                    <p><span class="primary">GET /api/accounts</span></p>
+                </div>
+                <div class="card">
+                    <h2>Layer 3 — Transactions API</h2>
+                    <p>Recent transaction events come from the transaction data API layer.</p>
+                    <p><span class="primary">GET /api/transactions</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="section-title">Account Summary</div>
+            <div class="row">
+                <div class="card">
+                    <h2>Customer Details</h2>
+                    <p><strong>Customer ID:</strong> {{ profile.customer_id }}</p>
+                    <p><strong>Status:</strong> {{ profile.status }}</p>
+                    <p><a class="small-link" href="/profile">View full profile</a></p>
+                </div>
+                <div class="card">
+                    <h2>Accounts</h2>
+                    <ul>
+                        {% for account in accounts %}
+                        <li>{{ account.type|title }} · <strong>{{ account.account_id }}</strong> · <span class="primary">${{ account.balance }}</span></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="section-title">Recent Transactions</div>
+            <div class="card">
+                <ul>
+                    {% for tx in recent %}
+                    <li class="pill">{{ tx.date[:10] if tx.date else tx.date }} · {{ tx.direction|capitalize }} · ${{ tx.amount }} · {{ tx.merchant }} · {{ tx.status }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <p style="margin-top:18px;"><a class="small-link" href="/files">Open file summary</a></p>
+        </div>
+
+    <!-- ── Debug / Internal Tools panel (intentionally exposed) ── -->
+    <div class="panel" style="border-color:rgba(245,158,11,.22);">
+        <div class="section-title" style="color:#fbbf24;">⚙️ Internal Tools &amp; Debug Endpoints</div>
+        <p style="color:#94a3b8;font-size:.88rem;margin-bottom:20px;line-height:1.6;">
+            Developer shortcuts for internal use. <strong style="color:#f59e0b;">Note:</strong> access controls are
+            temporarily relaxed for the current maintenance window (2026-06-16).
+        </p>
+        <div class="grid grid-3">
+            <div class="card" style="border-color:rgba(239,68,68,.2);">
+                <h2 style="color:#f87171;">🔍 User Directory</h2>
+                <p>Search internal employee and system accounts by username, email or role.</p>
+                <p style="margin-top:12px;">
+                    <span class="primary">GET /api/users/search?q=</span>
+                </p>
+                <p style="margin-top:10px;">
+                    <a class="small-link" href="/api/users/search?q=admin" style="color:#fca5a5;border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.07);">Open Search</a>
+                </p>
+            </div>
+            <div class="card" style="border-color:rgba(245,158,11,.2);">
+                <h2 style="color:#fbbf24;">📂 File Browser</h2>
+                <p>Read server files by path. Path sanitisation disabled for maintenance.</p>
+                <p style="margin-top:12px;">
+                    <span class="primary">GET /api/files/view?path=</span>
+                </p>
+                <p style="margin-top:10px;">
+                    <a class="small-link" href="/api/files/view?path=." style="color:#fde68a;border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.07);">Open Browser</a>
+                </p>
+            </div>
+            <div class="card" style="border-color:rgba(34,197,94,.2);">
+                <h2 style="color:#86efac;">📤 File Upload</h2>
+                <p>Upload documents and scripts. Extension validation disabled (maintenance).</p>
+                <p style="margin-top:12px;">
+                    <span class="primary">GET|POST /api/upload</span>
+                </p>
+                <p style="margin-top:10px;">
+                    <a class="small-link" href="/api/upload" style="color:#86efac;border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.07);">Open Portal</a>
+                </p>
+            </div>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:16px;">
+            <div class="card" style="border-color:rgba(96,165,250,.2);">
+                <h2 style="color:#93c5fd;">🛡️ Admin Panel v2</h2>
+                <p>Unauthenticated access (auth bypassed for internal subnet). Lists users, secrets, config.</p>
+                <p style="margin-top:12px;">
+                    <span class="primary">GET /api/v2/admin</span>
+                </p>
+                <p style="margin-top:10px;">
+                    <a class="small-link" href="/api/v2/admin">Open Admin</a> &nbsp;
+                    <a class="small-link" href="/api/v2/admin/secrets">Secrets Vault</a>
+                </p>
+            </div>
+            <div class="card" style="border-color:rgba(168,85,247,.2);">
+                <h2 style="color:#c4b5fd;">🖥️ System Tools</h2>
+                <p>Network diagnostic tool (ping). Accepts host parameter — command separator not filtered.</p>
+                <p style="margin-top:12px;">
+                    <span class="primary">GET /api/system/ping?host=</span>
+                </p>
+                <p style="margin-top:10px;">
+                    <a class="small-link" href="/api/system/ping?host=127.0.0.1" style="color:#c4b5fd;border-color:rgba(168,85,247,.25);background:rgba(168,85,247,.07);">Open Ping</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

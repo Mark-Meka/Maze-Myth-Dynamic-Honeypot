@@ -26,27 +26,28 @@ Traditional honeypots are **easily fingerprinted**:
 graph TB
     subgraph L1["🌐 Layer 1 — Dynamic API Maze"]
         A1["Infinite AI-generated endpoints"]
-        A2["Every attacker sees different data"]
-        A3["Gemini generates realistic banking JSON"]
+        A2["Unique banking responses per attacker"]
+        A3["Path-aware Gemini JSON generation"]
     end
 
-    subgraph L2["📤 Layer 2 — CVE-2020-36179 Upload Trap"]
-        B1["Fake Spring & PHP upload portals"]
-        B2["Accepts real webshell payloads"]
-        B3["Gemini generates AI shell + directory responses"]
+    subgraph L2["📤 Layer 2 — CVE-2020-36179 Upload Trap + Shell RAG"]
+        B1["Proxy routes suspicious traffic"]
+        B2["Spring/PHP upload portals capture payloads"]
+        B3["Shell RAG generates realistic command output"]
     end
 
     subgraph L3["🧠 Layer 3 — Attacker Intelligence"]
-        C1["Per-IP behavioral profiling"]
-        C2["Attack phase classification"]
-        C3["Deception strategy advisor"]
+        C1["Per-IP risk ranking & engagement scoring"]
+        C2["Phase detection: RECON → EXPLOIT → POST_EXPLOIT → LATERAL"]
+        C3["Dashboard analytics + deception recommendations"]
     end
 
     L1 --> L2
     L2 --> L3
-    L3 -.->|"Feeds attacker profile back"| L1
+    L3 -.->|"Feeds risk-scored profiles back"| L1
+    C1 --> C3
+    C2 --> C3
 ```
-
 ---
 
 ## 🗺️ How the Attack Flow Works
@@ -78,12 +79,21 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     actor A as 🎭 Attacker
+    participant P as Proxy
     participant H as Honeypot (8001)
+    participant R as Real App (8080)
     participant Intel as AttackerIntel
     participant RAG as Shell RAG Engine
     participant LLM as Gemini AI
 
-    A->>H: GET /clientportal/support/attachments.php
+    A->>P: GET /clientportal/support/attachments.php
+    P->>Intel: evaluate_ip_risk(A)
+    alt high risk or suspicious
+        P->>H: forward request to honeypot
+    else low risk
+        P->>R: forward request to decoy real app
+    end
+
     H->>Intel: record_form_view(ip)
     H-->>A: Realistic PHP form (Apache/2.4.54 + PHP/7.4.33 headers)
 
@@ -118,7 +128,36 @@ sequenceDiagram
 
 ---
 
-### Layer 3 — Attacker Intelligence Engine
+### Layer 3 — Attacker Intelligence & Risk Ranking
+
+The intelligence engine grades every attacker action with a numeric risk score and maps behavior into a session profile.
+It uses regex-based command classification in `src/attacker_intel.py`, then advances the session phase and adjusts engagement accordingly.
+
+Key metrics:
+- `attacker_risk`: average command risk score across all recorded commands (0–100)
+- `current_phase` / `phase_label`: session phase advanced by the highest-severity command seen
+- `engagement_score`: increases with form views, uploads, commands, and webshell execution
+- `top_commands`: commands sorted by `risk_score` and labeled with phase
+- `uploaded_files`: extension risk, payload tags, and threat level
+- `deception`: next-stage lure recommendations based on phase and previous activity
+
+Command scoring is mapped by category:
+
+| Phase | Score range | Example commands |
+|-------|-------------|------------------|
+| RECON | 15–35 | `whoami`, `id`, `ls`, `ifconfig`, `env`, `history` |
+| EXPLOIT | 45–80 | `cat /etc/shadow`, `sudo -l`, `curl http`, `wget http`, `chmod 4755`, `useradd` |
+| POST_EXPLOIT | 85–95 | `bash -i >& /dev/tcp`, `nc -e /bin`, `python -c socket.connect`, `perl -e socket`, `php -r fsockopen` |
+| LATERAL | 65–80 | `ssh user@host`, `scp`, `rsync`, `crontab -e`, `at` |
+
+If no command pattern matches, the system still records a default RECON-level score of `10`.
+
+Engagement scoring increments:
+- `FORM_VIEW` +2
+- `UPLOAD_SAFE` +5
+- `UPLOAD_SHELL` +25
+- `CMD` + (`risk_score // 5`)
+- `WEBSHELL_EXEC` +15
 
 ```mermaid
 flowchart LR
@@ -133,10 +172,11 @@ flowchart LR
         direction TB
         S1["📍 IP Geolocation\ncountry · ISP · VPN? · ASN"]
         S2["🔄 Phase Machine\nIDLE→RECON→EXPLOIT→POST_EXPLOIT→LATERAL"]
-        S3["📊 Engagement Score\n0–100 (weighted by event type)"]
-        S4["🔬 File Analysis\n18 payload patterns · extension risk"]
-        S5["💀 Command Timeline\nrisk-sorted · top 15 shown"]
-        S6["🎯 Deception Advisor\nhints to keep attacker engaged longer"]
+        S3["🚦 Attacker Risk\n0–100 average command risk score"]
+        S4["📊 Engagement Score\n0–100 behavior intensity"]
+        S5["🔬 File Analysis\n(extension risk + payload tags)"]
+        S6["💀 Command Timeline\nrisk-sorted top 15 commands"]
+        S7["🎯 Deception Hints\nnext bait move suggestions"]
     end
 
     subgraph Output["📊 Dashboard Output"]
@@ -261,13 +301,17 @@ flowchart TD
 | 11 | Multi-format tracked bait files + beacons (10+ formats) | ✅ Done |
 | 12 | CVE-2020-36179 File Upload RCE deception | ✅ Done |
 | 13 | Hybrid Shell RAG Engine (Gemini-first + Cowrie fallback) | ✅ Done |
-| 14 | Attacker Intelligence & Behavior Profiling | ✅ Done |
+| 14 | Attacker Intelligence, Phase Classification & Risk Ranking | ✅ Done |
 | 15 | IP Geolocation (ip-api.com, no key needed) | ✅ Done |
 | 16 | Deception Strategy Advisor | ✅ Done |
-| 17 | SQLite database encryption at rest | 🔜 Planned |
-| 18 | LLM Offline Fallback (Ollama) | 🔜 Planned |
-| 19 | Webhook + SIEM Alerts | 🔜 Planned |
-| 20 | Tarpit Mode | 🔜 Planned |
+| 17 | **Real-App Vulnerability Layer** — 6 exploitable routes with [VULN:TAG] logging | ✅ Done |
+| 18 | **Honeypot IP Gate** — only score ≥ 100 IPs enter; others get 404 | ✅ Done |
+| 19 | **Dashboard Real-App Attack Monitor** — live risk score leaderboard + exploit feed | ✅ Done |
+| 20 | **Dockerfile — zero apt-get build deps** — pure manylinux wheels, faster builds | ✅ Done |
+| 21 | SQLite database encryption at rest | 🔜 Planned |
+| 22 | LLM Offline Fallback (Ollama) | 🔜 Planned |
+| 23 | Webhook + SIEM Alerts | 🔜 Planned |
+| 24 | Tarpit Mode | 🔜 Planned |
 
 ---
 
@@ -313,17 +357,24 @@ The database and audit system are production-grade:
 - **Dual-write**: every event also written as plain-text to SQLite `logs` table for dashboard queries
 - **90-day auto-retention**: records older than 90 days purged automatically on startup
 
-### 6. Production Deployment — Docker + Gunicorn
+### 6. Production Deployment — Docker Compose Multi-Service Deception
 Ready for real internet-facing deployments:
 - **Multi-stage Dockerfile**: `builder` stage compiles C extensions, `base` stage is minimal runtime
-- **Non-root user**: all processes run as `honeypot` (uid=1001) — never root
-- **Gunicorn WSGI server**: 4 workers × 2 threads = 8 concurrent request capacity; 120s timeout for LLM calls
-- **Health checks**: `curl -sf http://localhost:8001/` — Docker auto-restarts on failure
-- **Named volumes**: `honeypot-logs`, `honeypot-db`, `honeypot-files` persist across container restarts
+- **Multi-service platform**: `proxy`, `real-app`, `honeypot`, `dashboard`
+- **Reverse proxy + risk engine**: OpenResty proxy routes traffic to the real decoy or honeypot
+- **Non-root user**: all Python processes run as `honeypot` (uid=1001) — never root
+- **Health checks**: Docker restart policies keep services running
+- **Named volumes**: `honeypot-logs`, `honeypot-db` persist across container restarts
 - **Dashboard isolation**: `dashboard` container mounts volumes as `:ro` (read-only)
 
 ### 7. Attacker Intelligence Dashboard
-Full behavioral profiling of every attacker IP:
+Full behavioral profiling of every attacker IP with exact session metrics pulled from `src/attacker_intel.py`:
+
+- `current_phase` / `phase_label` show the active attacker kill-chain stage
+- `engagement_score` increases with form views, uploads, commands, and webshell execution
+- `attacker_risk` is computed as the average `risk_score` of all recorded commands
+- `top_commands` are sorted by `risk_score` and include `phase` plus human-readable labels
+- `uploaded_files` include `extension_risk`, `threat_level`, and payload detection tags
 
 ```
 GET /api/dashboard/cve/file-upload             → Global intelligence summary
@@ -346,6 +397,33 @@ Every downloaded file has a **unique beacon ID** embedded. 10+ formats:
 | Text | `.txt` | URL at bottom |
 | SQL | `.sql` | Comment with URL |
 
+### 9. Real-App Vulnerability Layer — 6 Exploitable Routes
+
+The `real-app` service exposes 6 intentionally vulnerable endpoints for red-team testing. Every hit logs a `[VULN:TAG]` event to `real_app.log` and increments the IP's risk score:
+
+| Route | Vulnerability | Tag | Points |
+|-------|--------------|-----|--------|
+| `GET /api/search?q=` | SQL Injection | `SQLI` | +20 |
+| `GET /api/files?path=` | Path Traversal | `PATH_TRAVERSAL` | +25 |
+| `GET /api/admin/users` | Admin Enumeration | `ADMIN_ENUM` | +20 |
+| `POST /api/execute` | Command Injection | `CMD_INJECTION` | +40 |
+| `POST /api/upload` | Webshell Upload | `WEBSHELL_UPLOAD` | +40 |
+| `GET /api/account?id=` | IDOR | `IDOR` | +10 |
+
+The dashboard's **REAL-APP ATTACKS** tab parses these events from `real_app.log` and shows per-IP risk score leaderboards and a live exploit feed in real-time. See `EXPLOITATION_GUIDE.md` and `docs/ATTACK_REAL_SYSTEM.md` for full attack walkthroughs.
+
+### 10. Honeypot IP Gate — Invisible to Low-Risk Traffic
+
+The honeypot (`honeypot.py`) enforces an IP gate on every request via `honeypot_gate()` (`@app.before_request`):
+
+- **Score ≥ 100 via proxy header** (`X-Risk-Score`) → IP admitted and remembered
+- **Previously approved attacker** (in `_APPROVED_ATTACKERS` set) → admitted
+- **Loopback** (`127.0.0.1`) → admitted (Docker health checks)
+- **Dashboard API paths** from internal subnet → admitted (monitor.py polling)
+- **Everything else** → `404 Not Found` — honeypot is completely invisible
+
+This ensures that curious low-risk users or scanners who find port 8001 see nothing. Only the proxy — having confirmed score ≥ 100 — can route traffic in.
+
 ---
 
 ## 📁 Architecture
@@ -353,14 +431,27 @@ Every downloaded file has a **unique beacon ID** embedded. 10+ formats:
 ```
 Maze-Myth-Dynamic-Honeypot/
 │
-├── honeypot.py               ← Main Flask app (all routes, ~1050 lines)
+├── honeypot.py               ← Main Flask app (all routes, ~1100+ lines)
+│                               honeypot_gate() — IP gate (score ≥ 100 only)
 │                               Base64 log handler + SQLite log handler
 │                               Gunicorn-compatible WSGI entry point
 ├── run_honeypot.bat          ← Windows: double-click to start
 │
 ├── docker/
-│   ├── Dockerfile            ← Multi-stage build (non-root, health checks)
-│   └── docker-compose.yaml   ← Production: Gunicorn, volumes, network isolation
+│   ├── Dockerfile            ← Multi-stage build (no apt-get build deps,
+│   │                           pure manylinux wheels, non-root, health checks)
+│   └── .dockerignore
+│
+├── docker-compose.yaml      ← Production: proxy, real-app, honeypot, dashboard, network isolation
+│
+├── proxy/                   ← OpenResty reverse proxy with risk engine
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   └── lua/risk_engine.lua   ← IP risk scoring + sticky honeypot assignment
+│
+├── real-app/                ← Decoy banking site + 6 vulnerable routes
+│   ├── app.py               ← [VULN:TAG] logging, 6 exploitable endpoints
+│   └── templates/
 │
 ├── src/
 │   ├── file_upload_rce.py    ← CVE-2020-36179 deception module ⭐
@@ -378,9 +469,21 @@ Maze-Myth-Dynamic-Honeypot/
 │
 ├── dashboard/                ← Operator monitoring UI
 │   ├── index.html            ← Dashboard UI (port 8002)
+│   │                           REAL-APP ATTACKS tab — live risk score leaderboard
 │   └── monitor.py            ← Dashboard Flask → Gunicorn backend
+│                               /api/real/attacks — [VULN:TAG] parser + risk scorer
 │
 └── Dataset/                  ← shell_rag.pkl + ai_cmd_cache.json
+
+Docs:
+├── EXPLOITATION_GUIDE.md     ← Complete red-team attack guide ⭐
+└── docs/
+    ├── ATTACK_GUIDE.md       ← CVE-2020-36179 honeypot attack guide
+    ├── ATTACK_REAL_SYSTEM.md ← 6 vulnerable routes + redirect guide ⭐
+    ├── DEPLOYMENT.md         ← Docker production deployment
+    ├── RUN_STEPS.md          ← Quick start steps
+    ├── AUDIT_LOGS_GUIDE.md   ← Log format and query reference
+    └── SECURITY.md           ← Security considerations
 ```
 
 ---
@@ -394,7 +497,7 @@ git clone https://github.com/Mark-Meka/Maze-Myth-Dynamic-Honeypot.git
 cd Maze-Myth-Dynamic-Honeypot
 cp .env.template .env
 # Edit .env: GEMINI_API_KEY=your_key_here
-docker compose -f docker/docker-compose.yaml up -d
+docker compose -f docker-compose.yaml up -d
 ```
 
 Services start with Gunicorn, health checks, named volumes, and automatic restart.
@@ -422,20 +525,45 @@ python dashboard/monitor.py  # Terminal 2 — Dashboard (port 8002)
 
 | Service | URL | Audience |
 |---------|-----|----------|
-| 🎯 Honeypot | `http://localhost:8001` | **Attackers** — expose this |
+| 🌐 Proxy | `http://localhost` | **Attackers** — expose this |
+| 🎯 Honeypot (manual only) | `http://localhost:8001` | Internal only when running standalone |
 | 📊 Dashboard | `http://localhost:8002` | **Operators only** |
-| 🔍 Intel API | `http://localhost:8001/api/dashboard/cve/file-upload` | **Operators only** |
+| 🔍 Intel API | `http://localhost:8002/api/intel/summary` | **Operators only** |
 
 ---
 
-## 🔐 Environment Variables
+## �️ Key Files
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yaml` | Full platform orchestration: `proxy`, `real-app`, `honeypot`, `dashboard`, `deception-net` network |
+| `docker/Dockerfile` | Multi-stage build — **no apt-get build deps**, pure manylinux wheels, non-root, health checks |
+| `proxy/nginx.conf` | OpenResty reverse proxy routing and HTTP headers |
+| `proxy/lua/risk_engine.lua` | Per-IP risk scoring, sticky honeypot assignment, redirect logic |
+| `real-app/app.py` | Decoy banking application + **6 vulnerable routes** with `[VULN:TAG]` logging |
+| `honeypot.py` | Main honeypot Flask app: IP gate, API maze, CVE upload trap, audit logging |
+| `dashboard/monitor.py` | Operator monitoring backend — `/api/real/attacks` risk score parser |
+| `dashboard/index.html` | Dashboard UI — includes **REAL-APP ATTACKS** tab with live leaderboard |
+| `src/file_upload_rce.py` | CVE-2020-36179 upload trap logic and webshell registration |
+| `src/attacker_intel.py` | Per-IP attacker profiling, phase classification, engagement scoring |
+| `src/rag/shell_rag_loader.py` | Hybrid shell command engine: Gemini-first + cached fallback |
+| `EXPLOITATION_GUIDE.md` | **Complete red-team attack guide** — all 6 routes, chains, dashboard monitoring |
+| `docs/ATTACK_REAL_SYSTEM.md` | Vulnerable route reference with curl examples |
+| `.env.template` | Environment/template variables for API and internal URLs |
+
+---
+
+## �🔐 Environment Variables
 
 ```ini
 # .env  (copy from .env.template)
 GEMINI_API_KEY=AIzaSy...your-key-here...
-HONEYPOT_URL=http://localhost:8001
+HONEYPOT_URL=http://localhost
+HONEYPOT_INTERNAL_URL=http://10.0.0.3:8001
 LLM_MODEL=gemma-3-27b-it
 ```
+
+> See `AUDIT_LOGS_GUIDE.md` for log collection, event tags, and query examples.
 
 ---
 
@@ -444,7 +572,7 @@ LLM_MODEL=gemma-3-27b-it
 > ⚠️ **This is a deception tool. Run in an isolated environment (VM / container / VLAN).**
 >
 > - **Never expose port 8002** — dashboard is for operators only; use SSH tunneling for remote access.
-> - The Docker deployment uses network isolation (`maze-net` bridge network).
+> - Expose only the `proxy` service on port `80`; keep `honeypot` and `real-app` internal to `deception-net`.
 > - Review `DEPLOYMENT.md` before any production deployment.
 
 ---

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BankCorp — File Browser</title>
+  <style>
+    :root{
+      --bg0:#0a0e1a;--bg1:#0f172a;--bg2:#1e293b;
+      --border:rgba(148,163,184,.14);--accent:#3b82f6;
+      --accent2:#0ea5e9;--danger:#ef4444;--warn:#f59e0b;
+      --ok:#22c55e;--text:#e2e8f0;--muted:#94a3b8;
+      font-family:'Segoe UI',Inter,system-ui,sans-serif;
+      color-scheme:dark;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg0);color:var(--text);min-height:100vh;}
+
+    .topbar{
+      background:linear-gradient(90deg,#0a1628,#0d1f3c);
+      border-bottom:1px solid var(--border);
+      padding:14px 32px;display:flex;align-items:center;gap:16px;
+    }
+    .logo{font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:10px;}
+    .sep{flex:1;}
+    .badge{
+      background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.28);
+      color:#fca5a5;padding:4px 12px;border-radius:99px;
+      font-size:.78rem;font-weight:600;letter-spacing:.05em;
+    }
+
+    .page{max-width:1000px;margin:0 auto;padding:36px 24px;}
+    .breadcrumb{font-size:.84rem;color:var(--muted);margin-bottom:26px;}
+    .breadcrumb a{color:var(--accent2);text-decoration:none;}
+    .breadcrumb a:hover{text-decoration:underline;}
+
+    h1{font-size:1.45rem;margin-bottom:6px;}
+    .subtitle{color:var(--muted);font-size:.9rem;margin-bottom:28px;line-height:1.6;}
+
+    /* path input */
+    .path-bar{display:flex;gap:10px;margin-bottom:26px;}
+    .path-bar input{
+      flex:1;font-family:monospace;padding:12px 16px;
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:12px;color:#86efac;font-size:.9rem;outline:none;
+      transition:border-color .2s;
+    }
+    .path-bar input:focus{border-color:var(--accent);}
+    .path-bar button{
+      padding:12px 22px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff;border:none;border-radius:12px;font-weight:700;
+      cursor:pointer;font-size:.9rem;transition:filter .2s;
+    }
+    .path-bar button:hover{filter:brightness(1.1);}
+
+    /* alert */
+    .alert{
+      padding:14px 20px;border-radius:12px;font-size:.87rem;
+      line-height:1.6;margin-bottom:22px;border-left:4px solid;
+    }
+    .alert-danger{
+      background:rgba(239,68,68,.08);border-color:var(--danger);color:#fca5a5;
+    }
+    .alert-warn{
+      background:rgba(245,158,11,.08);border-color:var(--warn);color:#fde68a;
+    }
+
+    /* panel */
+    .panel{
+      background:var(--bg1);border:1px solid var(--border);
+      border-radius:20px;overflow:hidden;margin-bottom:22px;
+    }
+    .panel-hdr{
+      background:rgba(30,41,59,.8);border-bottom:1px solid var(--border);
+      padding:16px 22px;display:flex;align-items:center;
+      justify-content:space-between;font-size:.95rem;font-weight:600;
+    }
+    .path-pill{
+      font-family:monospace;font-size:.82rem;color:#6ee7b7;
+      background:rgba(110,231,183,.07);border:1px solid rgba(110,231,183,.15);
+      padding:4px 12px;border-radius:99px;
+    }
+
+    /* content viewer */
+    .content-viewer{
+      background:#050a14;border:1px solid rgba(110,231,183,.1);
+      border-radius:14px;margin:0;padding:22px;
+      font-family:'Courier New',Courier,monospace;font-size:.83rem;
+      color:#a3e8b0;line-height:1.75;
+      white-space:pre-wrap;word-break:break-all;
+      max-height:520px;overflow-y:auto;
+    }
+    .content-viewer::-webkit-scrollbar{width:6px;}
+    .content-viewer::-webkit-scrollbar-thumb{background:rgba(110,231,183,.25);border-radius:3px;}
+
+    .panel-body{padding:24px;}
+    .panel-ftr{
+      background:rgba(15,23,42,.6);border-top:1px solid var(--border);
+      padding:12px 22px;font-size:.78rem;color:var(--muted);
+      display:flex;justify-content:space-between;
+    }
+
+    /* quick links */
+    .quick-links{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:26px;}
+    .qlink{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:8px 14px;border-radius:10px;font-size:.82rem;
+      text-decoration:none;color:var(--accent2);
+      background:rgba(14,165,233,.07);border:1px solid rgba(14,165,233,.17);
+      transition:background .2s;cursor:pointer;
+    }
+    .qlink:hover{background:rgba(14,165,233,.14);}
+
+    a.link{color:var(--accent2);text-decoration:none;font-size:.83rem;}
+    a.link:hover{text-decoration:underline;}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">📂 BankCorp Internal File Browser</div>
+  <div class="sep"></div>
+  <span class="badge">INTERNAL</span>
+</div>
+
+<div class="page">
+  <div class="breadcrumb">
+    <a href="/dashboard">Dashboard</a> /
+    <a href="/api/v2/admin">Admin Panel</a> /
+    File Browser
+  </div>
+
+  <h1>📂 Internal File System Browser</h1>
+  <p class="subtitle">
+    Read internal server files by providing their absolute or relative path.
+    This tool is used by DevOps for on-call incident response.
+    <strong style="color:#f59e0b">⚠ Path sanitisation is disabled in the current build.</strong>
+  </p>
+
+  <form id="pathForm" method="GET" action="/api/files/view">
+    <div class="path-bar">
+      <input type="text" id="path" name="path"
+             placeholder="/var/www/html/app.py  or  ../../etc/passwd"
+             value="{{ path | default('') }}"
+             autocomplete="off">
+      <button type="submit">📖 Read File</button>
+    </div>
+  </form>
+
+  <!-- Quick-access buttons for juicy targets -->
+  <div class="quick-links">
+    <a class="qlink" href="/api/files/view?path=../../.env">🔑 .env</a>
+    <a class="qlink" href="/api/files/view?path=../../../etc/passwd">👥 /etc/passwd</a>
+    <a class="qlink" href="/api/files/view?path=../../../etc/shadow">🔒 /etc/shadow</a>
+    <a class="qlink" href="/api/files/view?path=../../../etc/hosts">🌐 /etc/hosts</a>
+    <a class="qlink" href="/api/files/view?path=../../../home/sysadmin/.ssh/id_rsa">🗝 id_rsa</a>
+    <a class="qlink" href="/api/files/view?path=/var/www/html/app.py">🐍 app.py</a>
+  </div>
+
+  {% if path %}
+
+  {% if traversal_warning %}
+  <div class="alert alert-danger">
+    ⚠️ <strong>Path Traversal Detected</strong> — reading: <code>{{ path }}</code><br>
+    This action has been logged to the security audit trail.
+  </div>
+  {% endif %}
+
+  <div class="panel">
+    <div class="panel-hdr">
+      <span>📄 File Contents</span>
+      <span class="path-pill">{{ path }}</span>
+    </div>
+    <div class="panel-body">
+      {% if content %}
+      <pre class="content-viewer">{{ content }}</pre>
+      {% else %}
+      <div class="alert alert-warn">
+        File not found or unreadable: <code>{{ path }}</code>
+      </div>
+      {% endif %}
+    </div>
+    <div class="panel-ftr">
+      <span>Size: {{ size | default(0) }} bytes &nbsp;|&nbsp; MIME: {{ mime | default('text/plain') }}</span>
+      <span>
+        <a class="link" href="/api/files/view?path=../../.env">Load .env</a> ·
+        <a class="link" href="/api/v2/admin/secrets">Secrets Vault</a>
+      </span>
+    </div>
+  </div>
+
+  {% endif %}
+
+  <p style="font-size:.82rem;color:var(--muted);margin-top:16px;">
+    Related:
+    <a href="/api/v2/admin" style="color:var(--accent2)">Admin Panel</a> ·
+    <a href="/api/upload" style="color:var(--accent2)">Upload Portal</a> ·
+    <a href="/api/system/ping?host=127.0.0.1" style="color:var(--accent2)">Ping Tool</a>
+  </p>
+</div>
+</body>
+</html>

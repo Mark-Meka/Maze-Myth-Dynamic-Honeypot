@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  real-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: maze-myth-real-app:latest
+    container_name: maze-myth-real-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./log_files:/log_files
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=development

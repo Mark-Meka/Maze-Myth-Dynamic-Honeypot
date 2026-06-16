@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BankCorp — Internal File Transfer Portal</title>
+  <style>
+    :root {
+      --bg0: #0a0e1a;
+      --bg1: #0f172a;
+      --bg2: #1e293b;
+      --border: rgba(148,163,184,.15);
+      --accent: #3b82f6;
+      --accent2: #0ea5e9;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --ok: #22c55e;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg0);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    /* ── Top bar ── */
+    .topbar {
+      background: linear-gradient(90deg, #0a1628 0%, #0d1f3c 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .topbar .logo {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .topbar .logo .icon { font-size: 1.4rem; }
+    .topbar .sep { flex: 1; }
+    .badge {
+      background: rgba(239,68,68,.15);
+      border: 1px solid rgba(239,68,68,.3);
+      color: #fca5a5;
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: .78rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+    }
+    /* ── Layout ── */
+    .page { max-width: 900px; margin: 0 auto; padding: 36px 24px; }
+    .breadcrumb {
+      font-size: .85rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    .breadcrumb a { color: var(--accent2); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: .9rem;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    /* ── Alert banner ── */
+    .alert {
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: .88rem;
+      line-height: 1.6;
+      margin-bottom: 28px;
+      border-left: 4px solid;
+    }
+    .alert-warn {
+      background: rgba(245,158,11,.08);
+      border-color: var(--warn);
+      color: #fde68a;
+    }
+    /* ── Panel ── */
+    .panel {
+      background: var(--bg1);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .panel-hdr {
+      background: rgba(30,41,59,.8);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    .panel-body { padding: 28px 24px; }
+    /* ── Form ── */
+    .field { margin-bottom: 22px; }
+    label {
+      display: block;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 8px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    input[type="text"],
+    input[type="file"],
+    select {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: .95rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    .file-drop {
+      border: 2px dashed rgba(59,130,246,.3);
+      border-radius: 14px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+      background: rgba(59,130,246,.04);
+    }
+    .file-drop:hover {
+      background: rgba(59,130,246,.09);
+      border-color: var(--accent);
+    }
+    .file-drop .icon { font-size: 2.5rem; margin-bottom: 10px; }
+    .file-drop p { color: var(--muted); font-size: .9rem; line-height: 1.7; }
+    .file-drop input { display: none; }
+    .hint { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 13px 28px;
+      border: none;
+      border-radius: 14px;
+      font-size: .95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s, filter .2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+    }
+    .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    /* ── File table ── */
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 14px;
+      font-size: .9rem;
+      border-bottom: 1px solid rgba(148,163,184,.06);
+    }
+    tr:last-child td { border-bottom: none; }
+    .ext-php  { color: #f472b6; }
+    .ext-pdf  { color: #fb923c; }
+    .ext-xlsx { color: var(--ok); }
+    .ext-zip  { color: var(--accent2); }
+    a.dl { color: var(--accent2); text-decoration: none; font-size: .85rem; }
+    a.dl:hover { text-decoration: underline; }
+    /* ── Footer ── */
+    .panel-ftr {
+      background: rgba(15,23,42,.6);
+      border-top: 1px solid var(--border);
+      padding: 12px 24px;
+      font-size: .78rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">
+      <span class="icon">📁</span>
+      BankCorp Internal File Transfer Portal
+    </div>
+    <div class="sep"></div>
+    <span class="badge">INTERNAL ONLY</span>
+  </div>
+
+  <div class="page">
+    <div class="breadcrumb">
+      <a href="/dashboard">Dashboard</a> /
+      <a href="/api/v2/admin">Admin Panel</a> /
+      Upload Portal
+    </div>
+
+    <h1>📤 Secure File Upload</h1>
+    <p class="subtitle">
+      Upload compliance documents, scripts, and configuration files for
+      internal review. Accepted by the BankCorp document management system.<br>
+      All uploads are stored in <code>/var/www/html/uploads/</code> and are
+      accessible at <code>/uploads/&lt;filename&gt;</code>.
+    </p>
+
+    <div class="alert alert-warn">
+      ⚠️ <strong>Notice:</strong> File extension validation is temporarily
+      disabled for maintenance (2026-06-16). All file types are accepted.
+      Contact <a href="mailto:sysadmin@bankcorp.internal" style="color:#fbbf24">sysadmin@bankcorp.internal</a>
+      if you experience upload issues.
+    </div>
+
+    <!-- Upload form -->
+    <div class="panel">
+      <div class="panel-hdr">📨 Upload New File</div>
+      <div class="panel-body">
+        <form id="uploadForm" method="POST" action="/api/upload" enctype="multipart/form-data">
+          <div class="field">
+            <label for="ticket_id">Support / Change Ticket ID</label>
+            <input type="text" id="ticket_id" name="ticket_id"
+                   placeholder="e.g. TKT-2026-0884  or  CHG-001234" required>
+          </div>
+
+          <div class="field">
+            <label for="category">File Category</label>
+            <select id="category" name="category">
+              <option value="compliance">Compliance Document</option>
+              <option value="script">Automation Script</option>
+              <option value="config">Configuration File</option>
+              <option value="report">Audit Report</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Attach File</label>
+            <div class="file-drop" id="dropzone" onclick="document.getElementById('fileInput').click()">
+              <div class="icon">☁️</div>
+              <p>Drag & drop a file here, or <strong>click to browse</strong></p>
+              <p>Any format accepted &mdash; PDF, DOCX, XLSX, CSV, ZIP, PHP, SH, PY&hellip;</p>
+              <input type="file" id="fileInput" name="file" required>
+            </div>
+            <p class="hint" id="fileHint">No file selected</p>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submitBtn">
+            📤 Upload File
+          </button>
+        </form>
+      </div>
+      <div class="panel-ftr">
+        <span>Max file size: 512 MB &nbsp;|&nbsp; No extension restrictions (maintenance mode)</span>
+        <span>Storage: /var/www/html/uploads/</span>
+      </div>
+    </div>
+
+    <!-- Recent uploads table -->
+    <div class="panel">
+      <div class="panel-hdr">📋 Recent Uploads</div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Uploaded By</th>
+              <th>Date</th>
+              <th>Size</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody id="uploadTable">
+            <tr>
+              <td class="ext-pdf">report_q1_2026.pdf</td>
+              <td>auditor</td>
+              <td>2026-06-14 09:12</td>
+              <td>187 KB</td>
+              <td><a class="dl" href="/uploads/report_q1_2026.pdf">⬇ Download</a></td>
+            </tr>
+            <tr>
+              <td class="ext-xlsx">payroll_export.xlsx</td>
+              <td>finance</td>
+              <td>2026-06-13 14:30</td>
+              <td>92 KB</td>
+              <td><a class="dl" href="/uploads/payroll_export.xlsx">⬇ Download</a></td>
+            </tr>
+            <tr>
+              <td class="ext-zip">config_backup.zip</td>
+              <td>sysadmin</td>
+              <td>2026-06-12 08:00</td>
+              <td>3.1 MB</td>
+              <td><a class="dl" href="/uploads/config_backup.zip">⬇ Download</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Show filename in hint
+    document.getElementById('fileInput').addEventListener('change', function() {
+      const hint = document.getElementById('fileHint');
+      hint.textContent = this.files[0]
+        ? `Selected: ${this.files[0].name}  (${(this.files[0].size/1024).toFixed(1)} KB)`
+        : 'No file selected';
+    });
+
+    // Handle form submit — show result inline
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.textContent = '⏳ Uploading…';
+      btn.disabled = true;
+      try {
+        const fd = new FormData(this);
+        const r  = await fetch('/api/upload', { method: 'POST', body: fd });
+        const j  = await r.json();
+        if (j.status === 'success') {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="ext-php">${j.filename}</td>
+            <td>you</td>
+            <td>${new Date().toISOString().slice(0,16).replace('T',' ')}</td>
+            <td>${(j.size/1024).toFixed(1)} KB</td>
+            <td><a class="dl" href="${j.url}">⬇ Open</a></td>`;
+          document.getElementById('uploadTable').prepend(tr);
+          btn.textContent = '✅ Uploaded!';
+          // Show the shell URL prominently
+          const div = document.createElement('div');
+          div.style.cssText = 'margin:18px 0;padding:14px 20px;border-radius:12px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#86efac;font-size:.9rem;';
+          div.innerHTML = `✅ File uploaded successfully.<br>
+            Access at: <a href="${j.url}" style="color:#6ee7b7">${j.url}</a><br>
+            To execute: <code>${j.url}?cmd=id</code>`;
+          document.querySelector('.page').insertBefore(div, document.querySelector('.panel'));
+        }
+      } catch(err) {
+        btn.textContent = '❌ Error';
+      }
+      setTimeout(() => { btn.textContent = '📤 Upload File'; btn.disabled = false; }, 3000);
+    });
+
+    // Drag-drop highlight
+    const dz = document.getElementById('dropzone');
+    ['dragover','dragenter'].forEach(e => dz.addEventListener(e, ev => {
+      ev.preventDefault(); dz.style.background='rgba(59,130,246,.15)';
+    }));
+    ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => {
+      ev.preventDefault(); dz.style.background='';
+      if (e === 'drop' && ev.dataTransfer.files[0]) {
+        document.getElementById('fileInput').files = ev.dataTransfer.files;
+        document.getElementById('fileHint').textContent = `Selected: ${ev.dataTransfer.files[0].name}`;
+      }
+    }));
+  </script>
+</body>
+</html>

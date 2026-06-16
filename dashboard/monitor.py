@@ -60,10 +60,13 @@ CORS(app)
 log = logging.getLogger(__name__)
 
 HONEYPOT = os.getenv("HONEYPOT_INTERNAL_URL", "http://127.0.0.1:8001")
+REAL_LOG_FILE = ROOT / "log_files" / "real_app.log"
 
 # Live feed buffer
 recent_activity = deque(maxlen=300)
 last_position   = 0
+real_recent_activity = deque(maxlen=300)
+real_last_position   = 0
 
 
 # ── SQLite helper (read-only, uses absolute path) ─────────────────────────────
@@ -224,6 +227,44 @@ def _parse(text: str) -> dict | None:
     return e
 
 
+def _parse_real(text: str) -> dict | None:
+    if not text or "[REALAPP]" not in text:
+        return None
+    e = {"timestamp": "", "level": "INFO", "message": "", "type": "real", "event": "real_access", "client_ip": ""}
+    m = re.search(r"\[REALAPP\]\s+([0-9T:\-\.Z]+)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\s+([A-Z]+)\s+(.+)", text)
+    if m:
+        e["timestamp"] = m.group(1)
+        e["client_ip"] = m.group(2)
+        e["message"] = f"{m.group(3)} {m.group(4)}"
+        return e
+    # fallback to a generic real-app message
+    e["message"] = text.strip()
+    ip = re.search(r"(\d+\.\d+\.\d+\.\d+)", text)
+    if ip:
+        e["client_ip"] = ip.group(1)
+    return e
+
+
+def _poll_real_log() -> list[dict]:
+    global real_last_position
+    if not REAL_LOG_FILE.exists():
+        return []
+    new = []
+    try:
+        with open(REAL_LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            f.seek(real_last_position)
+            for line in f:
+                if line.strip():
+                    entry = _parse_real(line)
+                    if entry is not None:
+                        new.append(entry)
+                        real_recent_activity.append(entry)
+            real_last_position = f.tell()
+    except Exception as ex:
+        log.error("[RealLog] read error: %s", ex)
+    return new
+
+
 def _poll_log() -> list[dict]:
     global last_position
     if not LOG_FILE.exists():
@@ -256,6 +297,152 @@ def index():
 @app.route("/api/new")
 def get_new():
     return jsonify(_poll_log())
+
+
+@app.route("/api/real/new")
+def get_real_new():
+    return jsonify(_poll_real_log())
+
+
+@app.route("/api/real/stats")
+def get_real_stats():
+    if not REAL_LOG_FILE.exists():
+        return jsonify({"total_events": 0, "unique_visitor_ips": 0})
+    ips = set()
+    total = 0
+    try:
+        with open(REAL_LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                total += 1
+                entry = _parse_real(line)
+                if entry and entry.get("client_ip"):
+                    ips.add(entry["client_ip"])
+    except Exception as ex:
+        log.warning("[RealStats] read error: %s", ex)
+    return jsonify({"total_events": total, "unique_visitor_ips": len(ips)})
+
+
+# ── Risk score points — mirrors proxy/lua/risk_engine.lua ────────────────────
+_VULN_POINTS = {
+    "SQLI":             20,
+    "PATH_TRAVERSAL":   25,
+    "ADMIN_ENUM":       20,
+    "CMD_INJECTION":    40,
+    "WEBSHELL_UPLOAD":  40,
+    "LOG4SHELL":        35,
+    "SHELLSHOCK":       35,
+    "REVSHELL":         45,
+    "IDOR":             10,
+    "SCANNER":          25,
+}
+
+_VULN_LABELS = {
+    "SQLI":             ("🗄️ SQL Injection",         "danger"),
+    "PATH_TRAVERSAL":   ("📂 Path Traversal",         "warning"),
+    "ADMIN_ENUM":       ("🛡️ Admin Enumeration",      "warning"),
+    "CMD_INJECTION":    ("💻 Command Injection",       "danger"),
+    "WEBSHELL_UPLOAD":  ("☠️  Webshell Upload",         "critical"),
+    "LOG4SHELL":        ("🪵 Log4Shell",               "critical"),
+    "SHELLSHOCK":       ("🐚 Shellshock",              "critical"),
+    "REVSHELL":         ("↩️  Reverse Shell",           "critical"),
+    "IDOR":             ("🔑 IDOR",                    "info"),
+    "SCANNER":          ("🤖 Scanner",                 "info"),
+}
+
+_REDIRECT_THRESHOLD = 150
+
+
+def _parse_vuln_log() -> tuple[list[dict], dict]:
+    """
+    Read all lines from real_app.log.  For every line containing
+    [VULN:TAG] extract:
+      - timestamp, IP, vulnerability tag, points awarded
+    Returns (events_list, ip_scores_dict).
+    """
+    events: list[dict] = []
+    ip_scores: dict[str, dict] = {}      # ip → {score, hits, redirected, events}
+
+    if not REAL_LOG_FILE.exists():
+        return events, ip_scores
+
+    vuln_re = re.compile(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[.\d]*Z?)"   # timestamp
+        r"\s+([0-9.]+)"                                         # IP
+        r"\s+\[VULN:([A-Z_]+)\]"                               # tag
+        r"\s*(.*)"                                              # detail
+    )
+
+    try:
+        with open(REAL_LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                m = vuln_re.search(line)
+                if not m:
+                    continue
+                ts, ip, tag, detail = m.group(1), m.group(2), m.group(3), m.group(4)
+                pts = _VULN_POINTS.get(tag, 5)
+                label, severity = _VULN_LABELS.get(tag, (tag, "info"))
+
+                ev = {
+                    "timestamp": ts,
+                    "ip":        ip,
+                    "tag":       tag,
+                    "label":     label,
+                    "severity":  severity,
+                    "points":    pts,
+                    "detail":    detail.strip()[:120],
+                }
+                events.append(ev)
+
+                # accumulate per-IP score
+                if ip not in ip_scores:
+                    ip_scores[ip] = {"ip": ip, "score": 0, "hits": 0,
+                                     "redirected": False, "tags": {}, "last_seen": ts}
+                ip_scores[ip]["score"] += pts
+                ip_scores[ip]["hits"]  += 1
+                ip_scores[ip]["last_seen"] = ts
+                ip_scores[ip]["tags"][tag] = ip_scores[ip]["tags"].get(tag, 0) + 1
+                if ip_scores[ip]["score"] >= _REDIRECT_THRESHOLD:
+                    ip_scores[ip]["redirected"] = True
+    except Exception as ex:
+        log.error("[RealAttacks] parse error: %s", ex)
+
+    # Attach running cumulative score to every event
+    running: dict[str, int] = {}
+    for ev in events:
+        ip = ev["ip"]
+        running[ip] = running.get(ip, 0) + ev["points"]
+        ev["cumulative_score"] = running[ip]
+        ev["redirected_at_this_point"] = running[ip] >= _REDIRECT_THRESHOLD
+
+    return events, ip_scores
+
+
+@app.route("/api/real/attacks")
+def get_real_attacks():
+    """
+    Parsed exploit events from real_app.log with cumulative Lua-equivalent
+    risk scores per attacker IP.
+    """
+    events, ip_scores = _parse_vuln_log()
+    profiles = sorted(ip_scores.values(), key=lambda x: x["score"], reverse=True)
+
+    redirected_ips = [p["ip"] for p in profiles if p["redirected"]]
+    total_pts = sum(p["score"] for p in profiles)
+
+    return jsonify({
+        "total_events":      len(events),
+        "unique_attackers":  len(ip_scores),
+        "redirected_count":  len(redirected_ips),
+        "redirected_ips":    redirected_ips,
+        "total_points_accumulated": total_pts,
+        "threshold":         _REDIRECT_THRESHOLD,
+        "events":            list(reversed(events))[-100:],   # latest 100
+        "attacker_profiles": profiles,
+    })
+
+
 
 
 @app.route("/api/stats")

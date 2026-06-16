@@ -1,0 +1,80 @@
+services:
+  proxy:
+    build:
+      context: ./proxy
+    container_name: vm1-proxy
+    ports:
+      - "80:80"
+    networks:
+      deception-net:
+        ipv4_address: 10.0.0.10
+    depends_on:
+      - real-app
+      - honeypot
+    restart: unless-stopped
+
+  real-app:
+    build:
+      context: ./real-app
+    container_name: vm2-real
+    expose:
+      - "8080"
+    # Share the same log volume so dashboard can read real_app.log
+    volumes:
+      - honeypot-logs:/app/log_files
+    networks:
+      deception-net:
+        ipv4_address: 10.0.0.2
+    restart: unless-stopped
+
+  honeypot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: honeypot
+    container_name: vm3-honeypot
+    expose:
+      - "8001"
+    env_file:
+      - .env
+    volumes:
+      - honeypot-db:/app/databases
+      - honeypot-logs:/app/log_files
+    networks:
+      deception-net:
+        ipv4_address: 10.0.0.3
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dashboard
+    container_name: vm3-dashboard
+    ports:
+      - "8002:8002"
+    environment:
+      # Must point to honeypot's internal Docker IP — NOT loopback
+      - HONEYPOT_INTERNAL_URL=http://10.0.0.3:8001
+    env_file:
+      - .env
+    volumes:
+      - honeypot-db:/app/databases:ro
+      - honeypot-logs:/app/log_files:ro
+    networks:
+      deception-net:
+        ipv4_address: 10.0.0.4
+    depends_on:
+      - honeypot
+    restart: unless-stopped
+
+networks:
+  deception-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+
+volumes:
+  honeypot-db:
+  honeypot-logs:

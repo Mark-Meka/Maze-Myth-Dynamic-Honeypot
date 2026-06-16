@@ -3,7 +3,7 @@ Dynamic API Honeypot with Realistic API Maze
 Creates interconnected endpoints with logical structure and breadcrumbs
 """
 
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, g
 from flask_cors import CORS
 import logging
 from pathlib import Path
@@ -163,6 +163,117 @@ console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(console_handler)
 logger.setLevel(logging.INFO)
+
+# ── Honeypot IP Gate ─────────────────────────────────────────────────────────
+# Only IPs with Lua risk score >= 100 (redirected by the proxy) may enter.
+# All other traffic gets a generic 404 — the honeypot must be invisible.
+# ---------------------------------------------------------------------------
+
+import os as _os
+
+# In-memory set of IPs that have already been approved by the gate.
+# Populated on first qualifying request; survives for the process lifetime.
+_APPROVED_ATTACKERS: set = set()
+
+# Trusted internal sources that may always reach health-check / dashboard
+# API paths without a risk score header.
+_LOOPBACK    = {"127.0.0.1", "::1", "0.0.0.0", "localhost"}
+_DASHBOARD_NETS = ("10.0.", "172.", "192.168.")   # broad internal subnet match
+
+# Paths the dashboard (monitor.py) polls directly — always allowed from
+# within the Docker network regardless of risk score.
+_DASHBOARD_API_PREFIXES = (
+    "/api/dashboard",
+    "/favicon.ico",
+)
+
+
+@app.before_request
+def honeypot_gate():
+    """
+    Block direct access to the honeypot from low-risk external IPs.
+
+    Rules (first match wins):
+    1. Loopback → allow  (Docker health checks, gunicorn probes)
+    2. Internal Docker subnet (10.0.x / 172.x / 192.168.x) → allow
+       (covers dashboard polling, inter-service calls — all internal)
+    3. X-Risk-Score header >= 100 → allow + remember IP
+    4. IP was previously approved → allow
+    5. Everything else → 404  (honeypot invisible to the public)
+    """
+    remote = (request.remote_addr or "").strip()
+    path   = request.path
+
+    # 1 — loopback / health-check (gunicorn workers, Docker health check)
+    if remote in _LOOPBACK:
+        return None
+
+    # 2 — any internal Docker network source (dashboard, proxy, real-app)
+    #     These never come from the public internet so no scoring needed.
+    if any(remote.startswith(prefix) for prefix in _DASHBOARD_NETS):
+        return None
+
+    # 3 — proxy carrying a qualifying risk score
+    try:
+        risk = int(request.headers.get("X-Risk-Score", "0"))
+    except (ValueError, TypeError):
+        risk = 0
+
+    real_ip = (
+        request.headers.get("X-Forwarded-For", "")
+        or request.headers.get("X-Real-IP", "")
+        or remote
+    ).split(",")[0].strip()
+
+    if risk >= 100:
+        _APPROVED_ATTACKERS.add(real_ip)
+        _APPROVED_ATTACKERS.add(remote)
+        return None
+
+    # 4 — returning approved attacker (e.g. subsequent requests after first redirect)
+    if real_ip in _APPROVED_ATTACKERS or remote in _APPROVED_ATTACKERS:
+        return None
+
+    # 5 — block everything else with a plain 404 — honeypot must be invisible
+    logger.info("[GATE] Blocked low-risk direct access from %s (score=%d, path=%s)",
+                real_ip, risk, path)
+    from flask import make_response
+    return make_response("Not Found", 404)
+
+
+@app.before_request
+def set_deception_layer():
+    try:
+        score = int(request.headers.get('X-Risk-Score', 0))
+    except ValueError:
+        score = 0
+
+    if score < 31:
+        g.deception_layer = 0
+    elif score < 61:
+        g.deception_layer = 1
+    elif score < 100:
+        g.deception_layer = 2
+    else:
+        g.deception_layer = 3
+
+
+@app.after_request
+def inject_layer_links(response):
+    if getattr(g, 'deception_layer', 0) == 1 and response.content_type.startswith('application/json'):
+        try:
+            payload = json.loads(response.get_data(as_text=True))
+            if isinstance(payload, dict):
+                payload.setdefault('_links', {})
+                payload['_links'].update({
+                    'admin': '/api/admin',
+                    'internal': '/api/internal/config'
+                })
+                response.set_data(json.dumps(payload))
+                response.headers['Content-Length'] = len(response.get_data())
+        except Exception:
+            pass
+    return response
 
 # Register CVE-2020-36179 File Upload RCE deception module
 register_file_upload_routes(app, state_manager=state, app_logger=logger)

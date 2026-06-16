@@ -155,6 +155,37 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
   border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+
+/* ── Real-App Attack Monitor styles ─────────────────────────── */
+.risk-bar-wrap{display:flex;align-items:center;gap:8px;margin-top:5px}
+.risk-bar{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.risk-fill{height:100%;border-radius:4px;transition:width .7s;}
+.risk-fill.low   {background:linear-gradient(90deg,#10b981,#34d399)}
+.risk-fill.med   {background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.risk-fill.high  {background:linear-gradient(90deg,#ef4444,#f97316)}
+.risk-fill.danger{background:linear-gradient(90deg,#dc2626,#9333ea)}
+.risk-val{font-size:10px;font-family:'JetBrains Mono',monospace;min-width:32px;text-align:right}
+.sev-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;
+  letter-spacing:.06em;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.sev-info    {background:rgba(0,243,255,.1);color:var(--cyan);border:1px solid rgba(0,243,255,.25)}
+.sev-warning {background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.25)}
+.sev-danger  {background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.28)}
+.sev-critical{background:rgba(220,38,38,.18);color:#fca5a5;border:1px solid rgba(220,38,38,.4)}
+.redir-yes{color:#fca5a5;font-weight:700}
+.redir-no {color:var(--gold)}
+.atk-score-row{display:flex;align-items:center;gap:10px;padding:9px 12px;
+  border-bottom:1px solid var(--border);font-size:11px}
+.atk-score-ip{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan);min-width:110px}
+.atk-ev-row{display:flex;align-items:flex-start;gap:10px;padding:7px 10px;
+  border-bottom:1px solid rgba(255,255,255,.04);font-size:10px;animation:slideIn .2s ease}
+.atk-ev-row.critical,.atk-ev-row.danger{background:rgba(239,68,68,.05)}
+.atk-ev-row.warning{background:rgba(245,158,11,.04)}
+.atk-ev-ts{font-family:'JetBrains Mono',monospace;color:var(--muted);white-space:nowrap;font-size:9px;min-width:80px}
+.atk-ev-pts{font-family:'JetBrains Mono',monospace;font-weight:700;min-width:40px;text-align:right}
+.pts-low{color:var(--cyan)}.pts-med{color:var(--gold)}.pts-high{color:var(--red)}
+.atk-ev-cum{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+.atk-ev-det{color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.redirect-flash{background:rgba(239,68,68,.14)!important;border-left:3px solid var(--red)!important}
 </style>
 </head>
 <body>
@@ -171,6 +202,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 <!-- tabs -->
 <div class="tabs">
   <div class="tab active" onclick="tab('overview')" id="tab-overview">LIVE MONITOR</div>
+  <div class="tab" onclick="tab('realattacks');loadRealAttacks()" id="tab-realattacks">REAL-APP ATTACKS <span id="ra-cnt" style="background:rgba(245,158,11,.2);color:var(--gold);border-radius:10px;padding:1px 7px;font-size:9px">0</span></div>
   <div class="tab" onclick="tab('attackers')" id="tab-attackers">ATTACKERS <span id="atk-cnt" style="background:rgba(239,68,68,.2);color:var(--red);border-radius:10px;padding:1px 7px;font-size:9px">0</span></div>
   <div class="tab" onclick="tab('analysis')" id="tab-analysis">AI ANALYSIS</div>
   <div class="tab" onclick="tab('files')" id="tab-files">FILES</div>
@@ -190,20 +222,76 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <span style="color:var(--muted)">RevShells: <b id="s-revshells" style="color:var(--red)">0</b></span>
     <span style="color:var(--muted)">Uploads: <b id="s-uploads" style="color:var(--gold)">0</b></span>
     <span style="color:var(--muted)">Commands: <b id="s-commands" style="color:var(--purple)">0</b></span>
+    <span style="color:var(--muted)">Real events: <b id="s-real-events" style="color:var(--cyan)">0</b></span>
   </div>
 
   <!-- live feed takes rest of page -->
-  <div class="card" style="height:calc(100vh - 195px)">
-    <div class="card-hdr">
-      <span class="card-title">🟥 Live Event Feed</span>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn" onclick="clearFeed()">Clear</button>
-        <span style="font-size:9px;color:var(--muted)" id="feed-cnt">0 events</span>
-        <span style="font-size:9px;color:var(--muted)" id="evt-cnt"></span>
+  <div class="g2" style="gap:14px">
+    <div class="card" style="height:calc(100vh - 210px)">
+      <div class="card-hdr">
+        <span class="card-title">🟥 Honeypot Event Feed</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn" onclick="clearFeed()">Clear</button>
+          <span style="font-size:9px;color:var(--muted)" id="feed-cnt">0 events</span>
+        </div>
+      </div>
+      <div class="feed" id="overview-feed" style="max-height:none;height:calc(100% - 42px)">
+        <div class="feed-item" style="color:var(--muted)">Waiting for honeypot activity…</div>
       </div>
     </div>
-    <div class="feed" id="overview-feed" style="max-height:none;height:calc(100% - 42px)">
-      <div class="feed-item" style="color:var(--muted)">Waiting for activity…</div>
+    <div class="card" style="height:calc(100vh - 210px)">
+      <div class="card-hdr">
+        <span class="card-title">🟦 Real System Feed</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn" onclick="clearRealFeed()">Clear</button>
+          <span style="font-size:9px;color:var(--muted)" id="real-feed-cnt">0 events</span>
+        </div>
+      </div>
+      <div class="feed" id="real-feed" style="max-height:none;height:calc(100% - 42px)">
+        <div class="feed-item" style="color:var(--muted)">Waiting for real system activity…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ REAL-APP ATTACK MONITOR ══════════════════════ -->
+<div class="panel" id="panel-realattacks">
+
+  <!-- summary strip -->
+  <div style="display:flex;flex-wrap:wrap;gap:18px;padding:8px 0 14px;border-bottom:1px solid var(--border);margin-bottom:14px;font-family:'JetBrains Mono',monospace;font-size:11px">
+    <span style="color:var(--muted)">Exploit Events: <b id="ra-total" style="color:var(--gold)">0</b></span>
+    <span style="color:var(--muted)">Unique Attackers: <b id="ra-uniq" style="color:var(--cyan)">0</b></span>
+    <span style="color:var(--muted)">Redirected: <b id="ra-redir" style="color:var(--red)">0</b></span>
+    <span style="color:var(--muted)">Total Points: <b id="ra-pts" style="color:var(--purple)">0</b></span>
+    <span style="color:var(--muted)">Threshold: <b style="color:var(--green)">100 pts</b></span>
+    <button class="btn" onclick="loadRealAttacks()" style="margin-left:auto">↻ Refresh</button>
+  </div>
+
+  <div class="g2">
+    <!-- LEFT: attacker leaderboard -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-title">🎯 Risk Score Leaderboard</span>
+        <span style="font-size:9px;color:var(--muted)" id="ra-lb-ts">—</span>
+      </div>
+      <div id="ra-leaderboard" style="max-height:calc(100vh - 270px);overflow-y:auto;padding:4px 0">
+        <div class="atk-score-row" style="color:var(--muted)">No attack events yet.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: live exploit event feed -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-title">⚡ Live Exploit Feed</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn" onclick="document.getElementById('ra-feed').innerHTML=''">Clear</button>
+          <span style="font-size:9px;color:var(--muted)" id="ra-feed-cnt">0 events</span>
+        </div>
+      </div>
+      <div id="ra-feed" style="max-height:calc(100vh - 270px);overflow-y:auto;padding:4px 0">
+        <div class="atk-ev-row" style="color:var(--muted)">Waiting for exploit attempts…</div>
+      </div>
     </div>
   </div>
 </div>
@@ -323,9 +411,10 @@ function md(t){
 /* ── Overview ── */
 async function loadOverview() {
   try{
-    const [st, intel] = await Promise.all([
+    const [st, intel, realStats] = await Promise.all([
       fetch(`${API}/api/stats`).then(r=>r.json()).catch(()=>({})),
       fetch(`${API}/api/intel/summary`).then(r=>r.json()).catch(()=>({})),
+      fetch(`${API}/api/real/stats`).then(r=>r.json()).catch(()=>({})),
     ]);
 
     // Unique Visitors = from SQLite (all IPs), not just CVE sessions
@@ -338,7 +427,7 @@ async function loadOverview() {
     document.getElementById('s-downloads').textContent  = st.total_downloads    ?? 0;
     document.getElementById('s-beacons').textContent    = st.activated_beacons  ?? 0;
     document.getElementById('atk-cnt').textContent      = st.unique_visitor_ips ?? 0;
-
+    document.getElementById('s-real-events').textContent = realStats.total_events ?? 0;
   }catch(e){console.warn('Overview error:',e)}
 }
 
@@ -543,6 +632,30 @@ function downloadAnalysis(boxId, filename) {
   URL.revokeObjectURL(url);
 }
 
+/* ── Feed type → emoji chip ── */
+const _FEED_CHIP = {
+  webshell:        ['☠️ WEBSHELL',    '#ef4444'],
+  webshell_upload: ['☠️ UPLOAD',      '#ef4444'],
+  beacon:          ['🚨 BEACON',      '#9333ea'],
+  download:        ['📄 DOWNLOAD',    '#06b6d4'],
+  discovery:       ['🔍 DISCOVERY',   '#10b981'],
+  auth:            ['🔑 AUTH',        '#f59e0b'],
+  dangerous_upload:['⚠️ DANGEROUS',   '#f59e0b'],
+  form_view:       ['📋 FORM VIEW',   '#94a3b8'],
+  probe:           ['🔎 PROBE',       '#64748b'],
+  real:            ['🏦 REAL-APP',    '#3b82f6'],
+  general:         ['📡 EVENT',       '#64748b'],
+};
+function _chip(type, level) {
+  const [label, color] = _FEED_CHIP[type] || _FEED_CHIP.general;
+  if (level === 'CRITICAL') return `<span style="background:rgba(239,68,68,.18);color:#fca5a5;border:1px solid rgba(239,68,68,.4);padding:1px 7px;border-radius:10px;font-size:8px;font-weight:700;font-family:'JetBrains Mono',monospace">${label}</span>`;
+  return `<span style="background:rgba(255,255,255,.06);color:${color};border:1px solid rgba(255,255,255,.1);padding:1px 7px;border-radius:10px;font-size:8px;font-weight:700;font-family:'JetBrains Mono',monospace">${label}</span>`;
+}
+function _ipBadge(ip) {
+  if (!ip) return '';
+  return `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--cyan);background:rgba(0,243,255,.07);border:1px solid rgba(0,243,255,.2);padding:1px 8px;border-radius:6px;white-space:nowrap" title="Attacker IP">${ip}</span>`;
+}
+
 /* ── Live feed ── */
 function addFeedItem(e) {
   const feed = document.getElementById('overview-feed');
@@ -550,18 +663,53 @@ function addFeedItem(e) {
   const wait = feed.querySelector('[style*="Waiting"]');
   if (wait) wait.remove();
   const item = document.createElement('div');
+  const isCrit = (e.level==='CRITICAL') || e.type==='webshell' || e.type==='webshell_upload' || e.type==='beacon';
   item.className = `feed-item ${(e.level||'').toLowerCase()} ${e.type||''}`;
-  item.innerHTML = `<div class="feed-ts">${e.timestamp||new Date().toLocaleTimeString()} ${e.client_ip?'— '+e.client_ip:''}</div>
-    <div class="feed-msg">${e.message||'Event'}</div>`;
+  item.style.cssText = isCrit
+    ? 'background:rgba(239,68,68,.06);border-left:2px solid var(--red);padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.05);animation:slideIn .2s ease'
+    : 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.04);animation:slideIn .2s ease';
+  item.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);min-width:75px">${(e.timestamp||'').slice(11,19)||new Date().toLocaleTimeString()}</span>
+      ${_chip(e.type, e.level)}
+      ${_ipBadge(e.client_ip)}
+    </div>
+    <div style="margin-top:4px;font-size:10px;color:${isCrit?'#fca5a5':'var(--text)'};padding-left:2px">${e.message||'Event'}</div>`;
   feed.insertBefore(item, feed.firstChild);
   feedCount++;
   document.getElementById('feed-cnt').textContent = feedCount + ' events';
+  while (feed.children.length > 200) feed.removeChild(feed.lastChild);
+}
+function addRealFeedItem(e) {
+  const feed = document.getElementById('real-feed');
+  if (!feed) return;
+  const wait = feed.querySelector('[style*="Waiting"]');
+  if (wait) wait.remove();
+  const item = document.createElement('div');
+  const isVuln = e.message && (e.message.includes('VULN') || e.message.includes('POST') || e.message.includes('PUT'));
+  item.style.cssText = isVuln
+    ? 'background:rgba(245,158,11,.05);border-left:2px solid var(--gold);padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.05);animation:slideIn .2s ease'
+    : 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.04);animation:slideIn .2s ease';
+  item.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);min-width:75px">${(e.timestamp||'').slice(11,19)||new Date().toLocaleTimeString()}</span>
+      ${_chip('real','INFO')}
+      ${_ipBadge(e.client_ip)}
+    </div>
+    <div style="margin-top:4px;font-size:10px;color:${isVuln?'var(--gold)':'var(--text)'};padding-left:2px">${e.message||'Real system event'}</div>`;
+  feed.insertBefore(item, feed.firstChild);
+  const count = Number(document.getElementById('real-feed-cnt').textContent.split(' ')[0]) || 0;
+  document.getElementById('real-feed-cnt').textContent = (count + 1) + ' events';
   while (feed.children.length > 200) feed.removeChild(feed.lastChild);
 }
 function clearFeed() {
   document.getElementById('overview-feed').innerHTML = '<div class="feed-item" style="color:var(--muted)">Feed cleared.</div>';
   feedCount = 0;
   document.getElementById('feed-cnt').textContent = '0 events';
+}
+function clearRealFeed() {
+  document.getElementById('real-feed').innerHTML = '<div class="feed-item" style="color:var(--muted)">Feed cleared.</div>';
+  document.getElementById('real-feed-cnt').textContent = '0 events';
 }
 
 /* ── Files ── */
@@ -614,29 +762,144 @@ async function loadFiles(){
 /* ── Poll loop ── */
 async function pollNew() {
   try{
-    const entries = await fetch(`${API}/api/new`).then(r=>r.json());
+    const [entries, realEntries] = await Promise.all([
+      fetch(`${API}/api/new`).then(r=>r.json()),
+      fetch(`${API}/api/real/new`).then(r=>r.json()).catch(()=>[]),
+    ]);
     for (const e of (entries||[])) addFeedItem(e);
+    for (const e of (realEntries||[])) addRealFeedItem(e);
     document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
-  }catch(e){}
+    // silently refresh attack monitor counter
+    refreshAttackCount();
+  }catch(e){console.warn('Poll error:',e)}
 }
+
+
+/* ── Real-App Attack Monitor ── */
+let _raLastTotal = 0;
+
+async function refreshAttackCount() {
+  try {
+    const d = await fetch(`${API}/api/real/attacks`).then(r=>r.json()).catch(()=>null);
+    if (!d) return;
+    const cnt = d.total_events || 0;
+    document.getElementById('ra-cnt').textContent = cnt;
+  } catch(e){}
+}
+
+async function loadRealAttacks() {
+  try {
+    const d = await fetch(`${API}/api/real/attacks`).then(r=>r.json());
+
+    // update header counters
+    document.getElementById('ra-total').textContent = d.total_events      || 0;
+    document.getElementById('ra-uniq').textContent  = d.unique_attackers  || 0;
+    document.getElementById('ra-redir').textContent = d.redirected_count  || 0;
+    document.getElementById('ra-pts').textContent   = d.total_points_accumulated || 0;
+    document.getElementById('ra-cnt').textContent   = d.total_events      || 0;
+    document.getElementById('ra-lb-ts').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+    // ── Leaderboard ──
+    const lb = document.getElementById('ra-leaderboard');
+    const profiles = d.attacker_profiles || [];
+    if (!profiles.length) {
+      lb.innerHTML = '<div class="atk-score-row" style="color:var(--muted)">No attack events yet.</div>';
+    } else {
+      lb.innerHTML = profiles.map(p => {
+        const pct = Math.min(100, (p.score / (d.threshold || 100)) * 100);
+        const fillCls = pct >= 100 ? 'danger' : pct >= 75 ? 'high' : pct >= 40 ? 'med' : 'low';
+        const status = p.redirected
+          ? '<span class="redir-yes">🔴 REDIRECTED</span>'
+          : `<span class="redir-no">🟡 PROBING (${p.score}/${d.threshold})</span>`;
+        const tagList = Object.entries(p.tags || {})
+          .map(([t, n]) => `<span style="font-size:8px;color:var(--muted)">${t}×${n}</span>`)
+          .join(' ');
+        return `
+          <div class="atk-score-row" style="${p.redirected ? 'background:rgba(239,68,68,.06)' : ''}">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="atk-score-ip">${p.ip}</span>
+                ${status}
+                <span style="font-size:9px;color:var(--muted)">hits: ${p.hits}</span>
+              </div>
+              <div class="risk-bar-wrap">
+                <div class="risk-bar">
+                  <div class="risk-fill ${fillCls}" style="width:${pct}%"></div>
+                </div>
+                <span class="risk-val" style="color:${fillCls==='danger'?'var(--red)':fillCls==='high'?'var(--orange)':fillCls==='med'?'var(--gold)':'var(--green)'}">${p.score}</span>
+              </div>
+              <div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">${tagList}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Live exploit event feed ──
+    const feed = document.getElementById('ra-feed');
+    const events = d.events || [];
+    const newTotal = d.total_events || 0;
+
+    if (newTotal !== _raLastTotal) {
+      _raLastTotal = newTotal;
+
+      if (!events.length) {
+        feed.innerHTML = '<div class="atk-ev-row" style="color:var(--muted)">Waiting for exploit attempts…</div>';
+      } else {
+        // Clear and re-render latest 100 events newest-first
+        feed.innerHTML = events.map(ev => {
+          const pts = ev.points || 0;
+          const ptsCls = pts >= 40 ? 'pts-high' : pts >= 25 ? 'pts-med' : 'pts-low';
+          const ts = (ev.timestamp || '').slice(11, 19) || '??:??:??';
+          const cum = ev.cumulative_score || 0;
+          const redirectRow = ev.redirected_at_this_point
+            ? `<div class="atk-ev-row redirect-flash" style="font-size:9px;font-family:'JetBrains Mono',monospace">
+                 🔴 REDIRECT TRIGGERED — ${ev.ip} crossed ${d.threshold} pts (cumulative: ${cum})
+               </div>` : '';
+          return redirectRow + `
+            <div class="atk-ev-row ${ev.severity || ''}">
+              <span class="atk-ev-ts">${ts}</span>
+              <span class="sev-badge sev-${ev.severity || 'info'}">${ev.label || ev.tag}</span>
+              <span class="atk-ev-pts ${ptsCls}">+${pts}</span>
+              <span class="atk-ev-cum">∑${cum}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);min-width:100px">${ev.ip}</span>
+              <span class="atk-ev-det" title="${ev.detail || ''}">${ev.detail || ''}</span>
+            </div>`;
+        }).join('');
+        feed.scrollTop = 0;
+      }
+      document.getElementById('ra-feed-cnt').textContent = events.length + ' events';
+    }
+
+  } catch(e){ console.warn('RealAttacks error:', e); }
+}
+
 
 /* ── Init ── */
 async function init(){
   try{
-    const entries = await fetch(`${API}/api/new`).then(r=>r.json());
+    const [entries, realEntries] = await Promise.all([
+      fetch(`${API}/api/new`).then(r=>r.json()),
+      fetch(`${API}/api/real/new`).then(r=>r.json()).catch(()=>[]),
+    ]);
     if (entries && entries.length) {
       document.getElementById('overview-feed').innerHTML = '';
       entries.slice(-60).reverse().forEach(e=>addFeedItem(e));
     }
-  }catch(e){}
+    if (realEntries && realEntries.length) {
+      document.getElementById('real-feed').innerHTML = '';
+      realEntries.slice(-60).reverse().forEach(e=>addRealFeedItem(e));
+    }
+  }catch(e){console.warn('Init error:',e)}
   loadOverview();
   loadAttackers();
   loadFiles();
+  refreshAttackCount();
 }
 
 init();
 setInterval(async()=>{ await pollNew(); loadOverview(); },5000);
 setInterval(loadAttackers,20000);
+setInterval(()=>{ if(document.getElementById('panel-realattacks').classList.contains('active')) loadRealAttacks(); },5000);
 </script>
 </body>
 </html>

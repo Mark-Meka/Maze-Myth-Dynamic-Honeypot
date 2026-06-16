@@ -388,8 +388,34 @@ def init(pkl_path=None, json_path=None, api_key=None):
             target_model = os.getenv("LLM_MODEL")
             if not target_model:
                 raise Exception("LLM_MODEL not found in .env")
-            _gemini_model = genai.GenerativeModel(target_model)
-            _log.info("[ShellRAG] Gemini AI generation enabled using model %s", target_model)
+            try:
+                _gemini_model = genai.GenerativeModel(target_model)
+                # Sanity check: prefer listing available models (if supported) to
+                # verify the configured model is present. Fall back to a tiny
+                # generate call only if listing isn't available.
+                try:
+                    if hasattr(genai, "ModelService") and hasattr(genai.ModelService, "list_models"):
+                        models = genai.ModelService.list_models()
+                        names = [m.name for m in models]
+                        if target_model not in names:
+                            raise Exception(f"model {target_model} not found in available models")
+                    else:
+                        # Some SDK versions don't expose ModelService; do a lightweight generate
+                        # to confirm the model supports generate_content. This may hit the API.
+                        _gemini_model.generate_content("ping")
+                except Exception as sanity_e:
+                    try:
+                        if hasattr(genai, "ModelService") and hasattr(genai.ModelService, "list_models"):
+                            models = genai.ModelService.list_models()
+                            names = [m.name for m in models]
+                            _log.info("[ShellRAG] Available Gemini models: %s", names)
+                    except Exception:
+                        pass
+                    raise sanity_e
+                _log.info("[ShellRAG] Gemini AI generation enabled using model %s", target_model)
+            except Exception as e:
+                _log.warning("[ShellRAG] Gemini init failed: %s — LLM disabled", e)
+                _gemini_model = None
         except Exception as e:
             _log.warning("[ShellRAG] Gemini init failed: %s", e)
 
